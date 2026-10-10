@@ -1,97 +1,25 @@
-// App Store 用スクリーンショットを作る（サンプルの作品データを入れた実際の画面を撮影し、見出しを付ける）
+// App Store 用スクリーンショットを作る。
+// サンプルの作品データ（store/samples の写真）を実際のアプリに入れて撮影し、見出しを付けて仕上げる。
 //   node scripts/make-screenshots.mjs
 // 出力：store/screenshots/iphone/*.png（1320×2868）、store/screenshots/ipad/*.png（2064×2752）
-// サンプルの編み図・表紙はこのスクリプトで生成したもので、実在の作品ではない。
+// 写真・本の表紙・編み図はすべて見本として作ったもので、実在の作品・書籍ではない。
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT = "store/screenshots";
-const TMP = join(OUT, "_tmp");
-mkdirSync(TMP, { recursive: true });
+const SAMPLES = "store/samples";
 const browser = await chromium.launch({
   executablePath: process.env.BROWSER_PATH ?? "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 });
+const b64 = (buf) => Buffer.from(buf).toString("base64");
+const dataUrl = (file) => `data:image/png;base64,${b64(readFileSync(join(SAMPLES, file)))}`;
 
-// ---------- サンプル素材 ----------
-
-/** ケーブル模様の編み図チャート（SVG） */
-function chartSvg(cols = 24, rows = 28) {
-  const c = 22;
-  const W = cols * c;
-  const H = rows * c;
-  let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W + 40}" height="${H + 30}" viewBox="0 0 ${W + 40} ${H + 30}" font-family="sans-serif">`;
-  for (let r = 0; r < rows; r++) {
-    for (let k = 0; k < cols; k++) {
-      const x = k * c;
-      const y = r * c;
-      const purl = k === 3 || k === 8 || k === 15 || k === 20;
-      const cableCol = (k >= 4 && k <= 7) || (k >= 16 && k <= 19);
-      s += `<rect x="${x}" y="${y}" width="${c}" height="${c}" fill="${cableCol ? "#fbefe8" : "#fff"}" stroke="#bbb" stroke-width="0.6"/>`;
-      if (purl) s += `<line x1="${x + 6}" y1="${y + c / 2}" x2="${x + c - 6}" y2="${y + c / 2}" stroke="#333" stroke-width="1.6"/>`;
-    }
-    // 6段ごとに交差
-    if ((rows - r) % 6 === 0) {
-      for (const k0 of [4, 16]) {
-        const x = k0 * c;
-        const y = r * c;
-        s += `<rect x="${x}" y="${y}" width="${c * 4}" height="${c}" fill="#fff" stroke="#333" stroke-width="1"/>`;
-        s += `<path d="M${x + 4} ${y + c - 4} L${x + c * 2 + c - 4} ${y + 4} M${x + c * 2 - 4 + c} ${y + c - 4}" stroke="#333" stroke-width="1.6" fill="none"/>`;
-        s += `<path d="M${x + c * 2 - 4} ${y + 4} L${x + c * 4 - 4} ${y + c - 4}" stroke="#333" stroke-width="1.6" fill="none"/>`;
-      }
-    }
-    s += `<text x="${W + 6}" y="${r * c + 15}" font-size="11" fill="#666">${rows - r}</text>`;
-  }
-  for (let k = 0; k < cols; k++) s += `<text x="${k * c + 7}" y="${H + 18}" font-size="10" fill="#666">${cols - k}</text>`;
-  return s + "</svg>";
-}
-
-function patternHtml(lang) {
-  const ja = lang === "ja";
-  const css = `body{font-family:"Yu Gothic","Meiryo",sans-serif;color:#2b2522;margin:0;padding:48px 56px;font-size:13px;line-height:1.8}
-    h1{font-size:26px;margin:0 0 4px;color:#7a3e2b} .sub{color:#888;margin-bottom:24px} h2{font-size:15px;border-bottom:2px solid #e5cfc4;padding-bottom:4px;margin-top:22px}
-    table{border-collapse:collapse} td{padding:3px 14px 3px 0;vertical-align:top} .page{page-break-after:always} .legend span{display:inline-block;margin-right:18px}`;
-  const p1 = ja
-    ? `<h1>ケーブル編みのカーディガン</h1><div class="sub">日本語訳（個人用メモ）</div>
-       <h2>材料</h2><table><tr><td>糸</td><td>並太ウール（約100g/220m）　ベージュ 6〜8玉</td></tr><tr><td>ボタン</td><td>直径18mm　7個</td></tr></table>
-       <h2>用具</h2><table><tr><td>針</td><td>6号・8号 輪針（80cm）、とじ針</td></tr><tr><td>その他</td><td>なわ編み針、ステッチマーカー</td></tr></table>
-       <h2>ゲージ</h2><p>メリヤス編み 20目×28段＝10cm角（8号針）</p>
-       <h2>できあがり寸法</h2><table><tr><td>サイズ</td><td>S / M / L / XL</td></tr><tr><td>胸囲</td><td>92 / 100 / 108 / 116 cm</td></tr><tr><td>着丈</td><td>56 / 58 / 60 / 62 cm</td></tr></table>
-       <h2>編み方</h2><ol><li>6号針で作り目を148（164・180・196）目し、2目ゴム編みを6cm編む。</li><li>8号針に替え、チャートAの模様を前後身頃に配置して編む。</li><li>脇から36cm編んだら、袖ぐりの減目をする。</li><li>前立てを拾い、ボタンホールを7か所あける。</li></ol>`
-    : `<h1>Cable Cardigan</h1><div class="sub">Original pattern</div>
-       <h2>Materials</h2><table><tr><td>Yarn</td><td>Worsted wool (approx. 100g/240yd), 6–8 skeins</td></tr><tr><td>Buttons</td><td>18mm, 7 pcs</td></tr></table>
-       <h2>Needles</h2><table><tr><td>Needles</td><td>US 6 and US 8 circular needles</td></tr><tr><td>Notions</td><td>Cable needle, stitch markers</td></tr></table>
-       <h2>Gauge</h2><p>20 sts × 28 rows = 4 in in stockinette on US 8</p>
-       <h2>Sizes</h2><p>S (M, L, XL) — finished chest 36 (39, 42½, 45½) in</p>
-       <h2>Instructions</h2><ol><li>With smaller needle, CO 148 (164, 180, 196) sts. Work in 2x2 rib for 2½ in.</li><li>Change to larger needle and work Chart A as set.</li><li>When piece measures 14 in from CO, shape armholes.</li><li>Pick up stitches for button band and work 7 buttonholes.</li></ol>`;
-  const p2 = `<h1>${ja ? "チャートA" : "Chart A"}</h1><div class="sub">${ja ? "記号の見方" : "Key"}</div>
-    <div class="legend"><span>□ ${ja ? "表目" : "knit"}</span><span>－ ${ja ? "裏目" : "purl"}</span><span>⤫ ${ja ? "2目交差" : "2/2 cable"}</span></div>
-    <div style="margin-top:16px">${chartSvg()}</div>`;
-  return `<html><head><meta charset="utf-8"><style>${css}</style></head><body><div class="page">${p1}</div><div class="page">${p2}</div><div>${p1}</div></body></html>`;
-}
-
-/** 表紙のイラスト（編み目模様） */
-function coverSvg(shape, bg, yarn) {
-  const knit = `<pattern id="v" width="16" height="16" patternUnits="userSpaceOnUse"><path d="M2 2 L8 13 L14 2" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="3" stroke-linecap="round"/></pattern>`;
-  const shapes = {
-    cardigan: `<path d="M150 170 L230 140 Q300 170 370 140 L450 170 L520 330 L460 360 L440 300 L440 640 L160 640 L160 300 L140 360 L80 330 Z"/><line x1="300" y1="175" x2="300" y2="640" stroke="rgba(0,0,0,.18)" stroke-width="4"/>`,
-    hat: `<path d="M150 520 Q150 260 300 230 Q450 260 450 520 Z"/><rect x="135" y="500" width="330" height="90" rx="20"/><circle cx="300" cy="215" r="48"/>`,
-    socks: `<path d="M200 140 h120 v300 q0 70 -60 110 l-90 60 q-60 30 -90 -20 q-20 -50 40 -80 l80 -60 z"/><path d="M360 160 h110 v290 q0 70 -55 105 l-80 55 q-55 25 -80 -20 l60 -50 q45 -35 45 -90 z" opacity=".85"/>`,
-    shawl: `<path d="M80 200 L520 200 L300 600 Z"/><path d="M80 200 L520 200" stroke="rgba(255,255,255,.7)" stroke-width="10"/>`,
-    mittens: `<path d="M150 600 v-260 q0 -120 90 -120 q90 0 90 120 v40 l40 -40 q35 -30 55 10 q15 30 -15 60 l-80 90 v100 z"/>`,
-    sweater: `<path d="M160 170 L240 140 Q300 175 360 140 L440 170 L520 340 L455 370 L430 300 L430 640 L170 640 L170 300 L145 370 L80 340 Z"/>`,
-  };
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800"><defs>${knit}</defs>
-    <rect width="600" height="800" fill="${bg}"/>
-    <g transform="translate(0,60)" fill="${yarn}">${shapes[shape]}</g>
-    <g transform="translate(0,60)" fill="url(#v)">${shapes[shape]}</g></svg>`;
-}
-
-async function renderPng(html, w, h) {
+async function renderJpeg(html, w, h) {
   const page = await browser.newPage({ viewport: { width: w, height: h } });
-  await page.setContent(`<html><body style="margin:0">${html}</body></html>`);
-  const buf = await page.screenshot({ type: "png" });
+  await page.setContent(`<html><body style="margin:0">${html}</body></html>`, { waitUntil: "load" });
+  const buf = await page.screenshot({ type: "jpeg", quality: 88 });
   await page.close();
   return buf;
 }
@@ -103,70 +31,219 @@ async function renderPdf(html) {
   return buf;
 }
 
-const pdfJa = await renderPdf(patternHtml("ja"));
-const pdfEn = await renderPdf(patternHtml("en"));
+// ---------- 表紙（写真を 3:4 の JPEG に縮小） ----------
+const photo = async (file) => renderJpeg(`<img src="${dataUrl(file)}" style="width:720px;height:960px;object-fit:cover;display:block">`, 720, 960);
 const covers = {
-  cardigan: await renderPng(coverSvg("cardigan", "#efe3d6", "#b88a6a"), 600, 800),
-  hat: await renderPng(coverSvg("hat", "#e3ebe0", "#7f9a78"), 600, 800),
-  socks: await renderPng(coverSvg("socks", "#ece4f1", "#9a86b5"), 600, 800),
-  shawl: await renderPng(coverSvg("shawl", "#f4e9d8", "#d0a35c"), 600, 800),
-  mittens: await renderPng(coverSvg("mittens", "#e2ebf1", "#6f93ad"), 600, 800),
-  sweater: await renderPng(coverSvg("sweater", "#f2e1df", "#c27f78"), 600, 800),
+  cardigan: await photo("cardigan.png"),
+  mittens: await photo("mittens.png"),
+  beret: await photo("beret.png"),
+  socks: await photo("socks.png"),
+  shawl: await photo("shawl.png"),
+  sweater: await photo("sweater.png"),
 };
 
-// ---------- アプリにサンプルデータを入れて撮影 ----------
+// ---------- 本の表紙（見本の架空の本） ----------
+async function bookCover(file, title, sub, publisher, tone) {
+  return renderJpeg(
+    `<div style="width:720px;height:960px;background:${tone};font-family:'Yu Mincho','Hiragino Mincho ProN',serif;position:relative;overflow:hidden">
+      <img src="${dataUrl(file)}" style="position:absolute;left:80px;top:320px;width:560px;height:560px;object-fit:cover;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.18)">
+      <div style="position:absolute;left:60px;right:60px;top:56px;color:#3b2a20">
+        <div style="font-size:30px;letter-spacing:6px;opacity:.75">${sub}</div>
+        <div style="font-size:68px;font-weight:700;line-height:1.25;margin-top:10px">${title}</div>
+      </div>
+      <div style="position:absolute;left:60px;bottom:40px;font-size:26px;color:#5a4636;letter-spacing:4px">${publisher}</div>
+    </div>`,
+    720,
+    960,
+  );
+}
+const bookCovers = {
+  nordic: await bookCover("mittens.png", "はじめての<br>北欧ニット", "編み込み模様のこもの", "手芸出版社", "#efe7dc"),
+  everyday: await bookCover("cardigan.png", "毎日着たい<br>手編みのニット", "ケーブル・ラグラン・ベスト", "あみもの書房", "#f3ece4"),
+  lace: await bookCover("shawl.png", "透かし模様の<br>ショールと小物", "電子書籍版", "レース舎", "#f6eedc"),
+};
 
+// ---------- 編み図（北欧柄のミトンの編み込みチャート） ----------
+// 1 = 紺、0 = 生成り。8枚の花びらの星（セルブ・スター）と縁の模様
+const STAR = [
+  "000000010000000",
+  "000000111000000",
+  "000001111100000",
+  "011000111000110",
+  "011100111001110",
+  "001110010011100",
+  "000111010111000",
+  "111111101111111",
+  "000111010111000",
+  "001110010011100",
+  "011100111001110",
+  "011000111000110",
+  "000001111100000",
+  "000000111000000",
+  "000000010000000",
+];
+function chartGrid() {
+  const cols = 27;
+  const rows = [];
+  const band = (pat) => Array.from({ length: cols }, (_, c) => pat[c % pat.length]);
+  rows.push(band("1"), band("0"), band("10"), band("0"), band("1"));
+  // 星（中央）。まわりは小さな点模様
+  for (const line of STAR) {
+    const pad = (cols - line.length) / 2;
+    const r = rows.length;
+    rows.push(Array.from({ length: cols }, (_, c) => (c >= pad && c < pad + line.length ? line[c - pad] : (c + r) % 4 === 0 ? "1" : "0")));
+  }
+  rows.push(band("1"), band("0"), band("100"), band("010"), band("0"), band("1"));
+  // 手首側の縞
+  for (let i = 0; i < 6; i++) rows.push(band("10"));
+  return rows.reverse(); // 配列の先頭＝1段目（一番下）
+}
+function chartSvg() {
+  const g = chartGrid();
+  const c = 20;
+  const W = g[0].length * c;
+  const H = g.length * c;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W + 46}" height="${H + 34}" font-family="sans-serif">`;
+  g.forEach((row, ri) => {
+    const y = H - (ri + 1) * c;
+    row.forEach((v, ci) => {
+      s += `<rect x="${ci * c}" y="${y}" width="${c}" height="${c}" fill="${v === "1" ? "#25386b" : "#fbf8f1"}" stroke="#b9b2a6" stroke-width="0.7"/>`;
+    });
+    if ((ri + 1) % 5 === 0 || ri === 0) s += `<text x="${W + 8}" y="${y + 15}" font-size="12" fill="#555">${ri + 1}</text>`;
+  });
+  for (let ci = 5; ci < g[0].length; ci += 5) s += `<line x1="${W - ci * c}" y1="0" x2="${W - ci * c}" y2="${H}" stroke="#7a7266" stroke-width="1.4"/>`;
+  for (let ri = 5; ri < g.length; ri += 5) s += `<line x1="0" y1="${H - ri * c}" x2="${W}" y2="${H - ri * c}" stroke="#7a7266" stroke-width="1.4"/>`;
+  return { svg: s + "</svg>", rows: g.length };
+}
+const chart = chartSvg();
+
+function patternHtml(lang) {
+  const ja = lang === "ja";
+  const css = `body{font-family:"Yu Gothic","Meiryo",sans-serif;color:#2b2522;margin:0;padding:44px 52px;font-size:13px;line-height:1.8}
+    h1{font-size:28px;margin:0 0 2px;color:#25386b;letter-spacing:1px} .sub{color:#8a7f73;margin-bottom:20px}
+    h2{font-size:15px;border-left:5px solid #25386b;padding-left:10px;margin:22px 0 8px}
+    table{border-collapse:collapse;width:100%} td{padding:5px 10px;border-bottom:1px solid #e6dfd4;vertical-align:top} td:first-child{width:110px;color:#6b6157}
+    .page{page-break-after:always} .legend{display:flex;gap:22px;margin:6px 0 14px} .sw{display:inline-block;width:14px;height:14px;border:1px solid #999;vertical-align:-2px;margin-right:6px}
+    .hero{width:100%;height:330px;object-fit:cover;border-radius:6px;margin:4px 0 6px}`;
+  const p1 = ja
+    ? `<h1>北欧柄のミトン</h1><div class="sub">日本語訳（自分用メモ付き）</div>
+       <img class="hero" src="${dataUrl("mittens.png")}">
+       <h2>材料</h2><table><tr><td>糸</td><td>中細ウール　紺 40g・生成り 35g</td></tr><tr><td>針</td><td>4号・5号 4本棒針（または輪針）</td></tr><tr><td>ゲージ</td><td>編み込み模様 30目×32段＝10cm角</td></tr><tr><td>サイズ</td><td>手のひら回り 19cm・長さ 25cm</td></tr></table>
+       <h2>編み方</h2><ol><li>4号針・紺で56目作り目し、輪にして1目ゴム編みを6cm編む。</li><li>5号針に替え、チャートAの編み込み模様を編む。</li><li>親指位置の11目を別糸に休め、続けて模様を編む。</li><li>指先は両端で減らし、残りの目をメリヤスはぎにする。</li></ol>`
+    : `<h1>Nordic Star Mittens</h1><div class="sub">Original pattern</div>
+       <img class="hero" src="${dataUrl("mittens.png")}">
+       <h2>Materials</h2><table><tr><td>Yarn</td><td>Fingering wool — Navy 40 g, Natural 35 g</td></tr><tr><td>Needles</td><td>US 2 and US 3 DPNs</td></tr><tr><td>Gauge</td><td>30 sts × 32 rnds = 4 in in colorwork</td></tr><tr><td>Size</td><td>Hand circumference 7½ in</td></tr></table>
+       <h2>Instructions</h2><ol><li>With smaller needles and Navy, CO 56 sts. Join and work 1×1 rib for 2½ in.</li><li>Change to larger needles and work Chart A.</li><li>Place 11 thumb sts on waste yarn and continue.</li><li>Shape top and graft remaining sts.</li></ol>`;
+  const p2 = `<h1>${ja ? "チャートA（甲側）" : "Chart A (back of hand)"}</h1><div class="sub">${ja ? "1マス＝1目。下から上へ編む" : "Read from bottom to top"}</div>
+    <div class="legend"><span><span class="sw" style="background:#25386b"></span>${ja ? "紺" : "Navy"}</span><span><span class="sw" style="background:#fbf8f1"></span>${ja ? "生成り" : "Natural"}</span></div>
+    <div id="chart">${chart.svg}</div>`;
+  return `<html><head><meta charset="utf-8"><style>${css}</style></head><body><div class="page">${p1}</div><div class="page">${p2}</div><div>${p1}</div></body></html>`;
+}
+const pdfJa = await renderPdf(patternHtml("ja"));
+/** 2ページ目の編み図が、ページのどこにあるか（ページの高さに対する割合）を測る */
+async function measureChart(html) {
+  const page = await browser.newPage({ viewport: { width: 794, height: 1123 } });
+  await page.emulateMedia({ media: "print" });
+  await page.setContent(html, { waitUntil: "load" });
+  const top = await page.evaluate(() => {
+    const p2 = document.querySelectorAll(".page")[1].getBoundingClientRect().top;
+    return document.querySelector("#chart svg").getBoundingClientRect().top - p2;
+  });
+  await page.close();
+  return top;
+}
+const PAGE_H = (297 / 25.4) * 96; // A4 の高さ（CSS px）
+const chartTop = await measureChart(patternHtml("ja"));
+const CELL = 20;
+/** 下から r 段目の中心の位置 */
+const rowY = (r) => (chartTop + chart.rows * CELL - (r - 0.5) * CELL) / PAGE_H;
+const rowH = CELL / PAGE_H;
+const pdfEn = await renderPdf(patternHtml("en"));
+
+// ---------- アプリにサンプルデータを入れて撮影 ----------
 const server = await createServer({ server: { port: 4190, strictPort: true }, logLevel: "error" });
 await server.listen();
 const base = "http://localhost:4190/";
 
 async function seed(page) {
-  const b64 = (buf) => Buffer.from(buf).toString("base64");
   await page.evaluate(
-    async ({ pdfJa, pdfEn, covers }) => {
+    async ({ pdfJa, pdfEn, covers, bookCovers, chartRows, ruler, mark }) => {
       const repo = await import("/src/db/repo.ts");
       const { db } = await import("/src/db/db.ts");
       const bin = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0)).buffer;
       await repo.ensureDefaultCategories();
       const cats = await db.categories.toArray();
       const cat = (n) => cats.filter((c) => c.name === n).map((c) => c.id);
-      const png = (k) => ({ type: "image/png", data: bin(covers[k]) });
-      const pdf = (name, kind, data, pageCount) => ({ name, kind, mimeType: "application/pdf", data: bin(data), pageCount });
-      const mk = async (o, files = [], cover) => repo.createPattern({ favorite: false, categoryIds: [], tags: [], ...o }, files, cover);
+      const jpg = (s) => ({ type: "image/jpeg", data: bin(s) });
+      const pdf = (name, kind, data) => ({ name, kind, mimeType: "application/pdf", data: bin(data), pageCount: 3 });
+      const mk = async (o, files = [], cover) => repo.createPattern({ favorite: false, categoryIds: [], tags: [], status: "want", ...o }, files, cover);
       const now = Date.now();
-      const main = await mk(
-        { title: "ケーブル編みのカーディガン", status: "in_progress", favorite: true, categoryIds: cat("カーディガン"), tags: ["冬", "ケーブル"], designer: "Knit Studio", shopName: "Ravelry", purchaseUrl: "https://www.ravelry.com/patterns/library/cable-cardigan", price: 8, currency: "USD", yarn: "並太ウール・6〜8玉", needles: "6号・8号 輪針", gauge: "20目×28段 / 10cm" },
-        [pdf("Cable Cardigan.pdf", "original", pdfEn, 3), pdf("ケーブルカーディガン_日本語訳.pdf", "translation", pdfJa, 3)],
-        png("cardigan"),
+
+      // 本・電子書籍
+      const nordic = await mk({ title: "はじめての北欧ニット", itemType: "book", author: "山田 花子", publisher: "手芸出版社", categoryIds: cat("小物") }, [], jpg(bookCovers.nordic));
+      await mk({ title: "毎日着たい手編みのニット", itemType: "book", author: "佐藤 あみ", publisher: "あみもの書房", categoryIds: cat("セーター") }, [], jpg(bookCovers.everyday));
+      await mk({ title: "透かし模様のショールと小物", itemType: "ebook", author: "鈴木 糸", publisher: "レース舎", ebookUrl: "https://example.com/ebook" }, [], jpg(bookCovers.lace));
+
+      // 作品
+      await mk({ title: "ラグランセーター", status: "done", categoryIds: cat("セーター"), tags: ["ラグラン"] }, [pdf("raglan.pdf", "original", pdfEn)], jpg(covers.sweater));
+      await mk({ title: "木の葉模様の三角ショール", status: "preparing", categoryIds: cat("ショール") }, [pdf("leaf-shawl.pdf", "original", pdfEn)], jpg(covers.shawl));
+      await mk({ title: "モヘアのベレー帽", status: "want", categoryIds: cat("帽子") }, [], jpg(covers.beret));
+      await mk({ title: "ラベンダーの透かし靴下", status: "want", favorite: true, categoryIds: cat("靴下") }, [pdf("lace-socks.pdf", "original", pdfEn)], jpg(covers.socks));
+      await mk(
+        { title: "ケーブル編みのカーディガン", status: "in_progress", favorite: true, categoryIds: cat("カーディガン"), tags: ["冬", "ケーブル"], designer: "Knit Studio" },
+        [pdf("Cable Cardigan.pdf", "original", pdfEn)],
+        jpg(covers.cardigan),
       );
-      await mk({ title: "モヘアのベレー帽", status: "in_progress", categoryIds: cat("帽子"), designer: "Petit Laine" }, [pdf("beret.pdf", "original", pdfEn, 3)], png("hat"));
-      await mk({ title: "ラベンダー色の靴下", status: "want", favorite: true, categoryIds: cat("靴下") }, [], png("socks"));
-      await mk({ title: "三角ショール", status: "preparing", categoryIds: cat("ショール") }, [pdf("shawl.pdf", "original", pdfEn, 3)], png("shawl"));
-      await mk({ title: "北欧柄のミトン", status: "want", categoryIds: cat("小物") }, [], png("mittens"));
-      await mk({ title: "ラグランセーター", status: "done", categoryIds: cat("セーター") }, [pdf("raglan.pdf", "original", pdfEn, 3)], png("sweater"));
+      const main = await mk(
+        {
+          title: "北欧柄のミトン",
+          status: "in_progress",
+          favorite: true,
+          categoryIds: cat("小物"),
+          tags: ["編み込み", "冬"],
+          designer: "Nordic Knits",
+          sourceBookId: nordic,
+          sourcePage: "24",
+          purchaseUrl: "https://www.ravelry.com/patterns/library/nordic-star-mittens",
+          shopName: "Ravelry",
+          price: 6,
+          currency: "USD",
+          yarn: "中細ウール　紺・生成り",
+          needles: "4号・5号 4本棒針",
+          gauge: "30目×32段 / 10cm",
+        },
+        [pdf("Nordic Star Mittens.pdf", "original", pdfEn), pdf("北欧柄のミトン_日本語訳.pdf", "translation", pdfJa)],
+        jpg(covers.mittens),
+      );
+
       // 段数カウンター
-      const c1 = await repo.createCounter(main, "身頃", 120);
-      await repo.stepCounter(c1, 48);
-      const c2 = await repo.createCounter(main, "模様（6段ごとに交差）", 6);
-      await repo.stepCounter(c2, 4);
-      // 日本語訳PDFの2ページ目（チャート）に書き込み
+      const c1 = await repo.createCounter(main, "甲側の模様", chartRows);
+      await repo.stepCounter(c1, 23);
+      const c2 = await repo.createCounter(main, "親指", 18);
+      await repo.stepCounter(c2, 6);
+
+      // 日本語訳の2ページ目（チャート）：定規・マーカー・メモ
       const ja = (await db.files.where("patternId").equals(main).toArray()).find((f) => f.kind === "translation");
-      await repo.addAnnotation({ type: "ink", fileId: ja.id, page: 2, points: [0.06, 0.505, 0.93, 0.505], color: "#f5d000", width: 0.03, opacity: 0.4 });
-      // 交差の位置をペンで丸囲み
-      const circle = [];
-      for (let i = 0; i <= 28; i++) {
-        const t = (i / 28) * Math.PI * 2;
-        circle.push(0.235 + 0.085 * Math.cos(t), 0.33 + 0.028 * Math.sin(t));
-      }
-      await repo.addAnnotation({ type: "ink", fileId: ja.id, page: 2, points: circle, color: "#e53935", width: 0.005, opacity: 1 });
-      await repo.addAnnotation({ type: "note", fileId: ja.id, page: 2, x: 0.86, y: 0.42, text: "ここから袖ぐりの減目" });
-      await repo.saveViewState(ja.id, { page: 2, zoom: 1, scrollXRatio: 0, scrollYRatio: 0.5 });
-      // 最近開いた順
-      const all = await db.patterns.toArray();
-      for (const [i, p] of all.entries()) await db.patterns.update(p.id, { lastOpenedAt: now - i * 3600_000 });
+      // 段数カウンターが23段なので、定規は今編んでいる24段目に置く
+      await repo.saveRuler(ja.id, { page: 2, y: ruler.y, height: ruler.h, visible: true, counterId: c1 });
+      await repo.addAnnotation({ type: "ink", fileId: ja.id, page: 2, points: [0.066, mark.y, 0.744, mark.y], color: "#f5d000", width: mark.w, opacity: 0.45 });
+      await repo.addAnnotation({ type: "note", fileId: ja.id, page: 2, x: 0.86, y: mark.y, text: "ここから親指の目を休める" });
+      await repo.saveViewState(ja.id, { page: 2, zoom: 1, scrollXRatio: 0, scrollYRatio: ruler.y + 0.18 });
+
+      // 最近開いた順（ミトンが一番新しい）
+      const all = (await db.patterns.toArray()).sort((a, b) => (a.id === main ? -1 : b.id === main ? 1 : 0));
+      for (const [i, p] of all.entries()) await db.patterns.update(p.id, { lastOpenedAt: now - i * 3600_000, updatedAt: now - i * 60_000 });
       return main;
     },
-    { pdfJa: b64(pdfJa), pdfEn: b64(pdfEn), covers: Object.fromEntries(Object.entries(covers).map(([k, v]) => [k, b64(v)])) },
+    {
+      pdfJa: b64(pdfJa),
+      pdfEn: b64(pdfEn),
+      covers: Object.fromEntries(Object.entries(covers).map(([k, v]) => [k, b64(v)])),
+      bookCovers: Object.fromEntries(Object.entries(bookCovers).map(([k, v]) => [k, b64(v)])),
+      chartRows: chart.rows,
+      ruler: { y: rowY(24), h: rowH },
+      mark: { y: rowY(11), w: (CELL / 794) * 0.95 },
+    },
   );
 }
 
@@ -184,39 +261,56 @@ async function capture(device) {
   await page.getByText("編み図ライブラリへようこそ").waitFor();
   await seed(page);
   const shots = {};
-  const settle = () => page.waitForTimeout(800);
+  const settle = () => page.waitForTimeout(900);
+  const canvasReady = (n) => page.waitForFunction((n) => (document.querySelector(`.page-box[data-page="${n}"] canvas`)?.width ?? 0) > 0, n);
 
+  // ライブラリ（写真がずらりと並ぶ）
+  await page.goto(base + "#/library");
+  await page.getByRole("tab", { name: "すべて" }).click();
+  await page.locator(".grid .card").nth(8).waitFor();
+  await settle();
+  shots.library = await page.screenshot();
+
+  // 作品詳細
+  await page.getByText("北欧柄のミトン").first().click();
+  await page.locator(".detail-title").waitFor();
+  await settle();
+  shots.detail = await page.screenshot();
+
+  // 定規＋段数カウンター
+  await page.getByRole("link", { name: /日本語訳\.pdf/ }).click();
+  await canvasReady(2);
+  await page.locator(".ruler-band").waitFor();
+  await page.getByRole("button", { name: "段数" }).click();
+  await page.waitForTimeout(1400);
+  shots.ruler = await page.screenshot();
+
+  // 書き込み
+  await page.getByRole("button", { name: "段数" }).click();
+  await page.getByRole("button", { name: "定規" }).click();
+  await page.getByRole("button", { name: "書込" }).click();
+  await page.waitForTimeout(1200);
+  shots.annotate = await page.screenshot();
+  await page.getByRole("button", { name: "書込" }).click();
+  await page.getByRole("button", { name: "定規" }).click();
+
+  // ホーム（制作中）
   await page.goto(base + "#/");
   await page.locator(".wip-card").first().waitFor();
   await settle();
   shots.home = await page.screenshot();
 
-  await page.goto(base + "#/library");
-  await page.locator(".grid .card").nth(5).waitFor();
+  // 本・電子書籍の棚
+  await page.evaluate(() => {
+    const h = [...document.querySelectorAll("h2")].find((e) => e.textContent?.startsWith("持っている本"));
+    window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 24);
+  });
   await settle();
-  shots.library = await page.screenshot();
+  shots.books = await page.screenshot();
 
-  await page.goto(base + "#/library");
-  await page.getByText("ケーブル編みのカーディガン").click();
-  await page.locator(".detail-title").waitFor();
-  await settle();
-  shots.detail = await page.screenshot();
-
-  await page.getByRole("link", { name: /日本語訳\.pdf/ }).click();
-  await page.waitForFunction(() => (document.querySelector('.page-box[data-page="2"] canvas')?.width ?? 0) > 0);
-  await page.locator('.page-box[data-page="2"] .note-pin').waitFor();
-  await page.getByRole("button", { name: "段数" }).click();
-  await page.waitForTimeout(1200);
-  shots.counter = await page.screenshot();
-
-  await page.getByRole("button", { name: "段数" }).click();
-  await page.getByRole("button", { name: "書込" }).click();
-  await page.waitForTimeout(1200);
-  shots.annotate = await page.screenshot();
-
+  // プライバシー
   await page.goto(base + "#/settings");
   await page.evaluate(() => {
-    // 末尾の「プライバシー」が見えるよう、余白を足してから見出しを画面上部に合わせる
     document.querySelector(".main").style.paddingBottom = "100vh";
     const h = [...document.querySelectorAll("h2")].find((e) => e.textContent === "プライバシー");
     window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 16);
@@ -224,7 +318,7 @@ async function capture(device) {
   await settle();
   shots.privacy = await page.screenshot();
 
-  // プレミアムの案内（6件目を登録しようとしたとき）。開発サーバー専用の表示切り替えで、購入画面を再現する
+  // 購入画面（審査用のみ。ストアの画像には使わない）
   await page.goto(base + "#/");
   await page.evaluate(async () => {
     const m = await import("/src/lib/premium.ts");
@@ -242,16 +336,20 @@ async function capture(device) {
 }
 
 // ---------- 見出しを付けて仕上げる ----------
-
-const captions = [
-  ["home", "制作中の作品に、", "すぐ戻れる"],
-  ["detail", "原本と日本語訳を、", "作品ごとにひとつに"],
-  ["counter", "編みながら", "段数カウンター"],
-  ["annotate", "マーカーとメモで", "編み図に書き込み"],
-  ["library", "編みたい作品も完成品も", "すっきり整理"],
-  ["privacy", "アカウント不要。", "データは端末の中だけ"],
-  ["paywall", "5作品まで無料。", "それ以上は月額150円で無制限"],
+// 最初の数枚が検索結果に出るので、一番の魅力を先頭に置く
+const slides = [
+  { key: "library", title: "編み図も、本も、\nぜんぶここに。", hero: true },
+  { key: "ruler", title: "今編んでいる段が、\nひと目でわかる", sub: "定規と段数カウンターが連動" },
+  { key: "detail", title: "英語の原本と日本語訳を\nひとつの作品に", sub: "購入先や糸・針の情報もまとめて" },
+  { key: "annotate", title: "マーカーとメモで\n編み図に書き込み", sub: "元のPDFはそのまま" },
+  { key: "home", title: "制作中の作品に\nすぐ戻れる", sub: "前回見ていたページから再開" },
+  { key: "books", title: "持っている本も\n電子書籍も管理", sub: "バーコードを読むだけで登録" },
+  { key: "privacy", title: "データは\n端末の中だけ", sub: "アカウント登録なし・広告なし" },
 ];
+
+const KNIT_BG = `url("data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><path d="M6 6 L22 30 L38 6" fill="none" stroke="rgba(168,98,74,0.07)" stroke-width="6" stroke-linecap="round"/></svg>',
+)}")`;
 
 async function compose(device, shots) {
   const phone = device === "iphone";
@@ -259,20 +357,52 @@ async function compose(device, shots) {
   const dir = join(OUT, device);
   mkdirSync(dir, { recursive: true });
   const page = await browser.newPage({ viewport: { width: W, height: H } });
-  let i = 0;
-  for (const [key, l1, l2] of captions) {
-    const img = `data:image/png;base64,${shots[key].toString("base64")}`;
-    const shotW = phone ? 1060 : 1560;
-    // 長い見出しは、端からはみ出さないよう文字を小さくする
-    const maxChars = Math.max(l1.length, l2.length);
-    const fontSize = Math.min(phone ? 92 : 104, Math.floor((W * 0.86) / maxChars));
-    await page.setContent(`<html><body style="margin:0;width:${W}px;height:${H}px;overflow:hidden;background:linear-gradient(180deg,#f3e6dc,#efe0d3);font-family:'Yu Gothic','Meiryo',sans-serif">
-      <div style="text-align:center;padding-top:${phone ? 150 : 120}px;color:#5a3a2c;font-weight:800;font-size:${fontSize}px;line-height:1.3;letter-spacing:2px">${l1}<br>${l2}</div>
-      <img src="${img}" style="display:block;margin:${phone ? 110 : 90}px auto 0;width:${shotW}px;border-radius:${phone ? 64 : 40}px;box-shadow:0 30px 80px rgba(90,58,44,.28);border:${phone ? 14 : 12}px solid #2b2522">
-      </body></html>`);
-    await page.waitForTimeout(200);
-    const name = `${String(++i).padStart(2, "0")}-${key}.png`;
-    writeFileSync(join(dir, name), await page.screenshot({ type: "png" }));
+  for (const [i, s] of slides.entries()) {
+    const img = `data:image/png;base64,${shots[s.key].toString("base64")}`;
+    const lines = s.title.split("\n");
+    const maxChars = Math.max(...lines.map((l) => l.length));
+    const titleSize = Math.min(phone ? 104 : 112, Math.floor((W * 0.84) / maxChars));
+    const shotW = phone ? (s.hero ? 1000 : 1040) : s.hero ? 1440 : 1500;
+    const frame = phone ? 16 : 14;
+    const radius = phone ? 70 : 44;
+    const badges = s.hero
+      ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:${phone ? 18 : 22}px;margin:${phone ? 34 : 28}px auto 0;max-width:${phone ? 1100 : 1800}px">${["広告なし", "アカウント不要", "オフラインOK", "5作品まで無料"]
+          .map(
+            (b) =>
+              `<span style="background:#fffaf4;border:3px solid #c7856c;color:#8e4a33;border-radius:999px;padding:${phone ? "10px 24px" : "10px 26px"};font-size:${phone ? 38 : 40}px;font-weight:800;white-space:nowrap">${b}</span>`,
+          )
+          .join("")}</div>`
+      : "";
+    // 先頭の1枚は、写真を背景に散らして華やかにする
+    const floating = s.hero
+      ? [
+          ["cardigan.png", phone ? -170 : -40, phone ? 1250 : 900, -9],
+          ["shawl.png", phone ? W - 250 : W - 420, phone ? 1120 : 820, 8],
+          ["socks.png", phone ? -150 : 30, phone ? 2250 : 1950, 7],
+          ["beret.png", phone ? W - 270 : W - 400, phone ? 2200 : 1900, -6],
+        ]
+          .map(
+            ([f, x, y, r]) =>
+              `<img src="${dataUrl(f)}" style="position:absolute;left:${x}px;top:${y}px;width:${phone ? 420 : 460}px;height:${phone ? 560 : 610}px;object-fit:cover;border-radius:28px;border:12px solid #fff;box-shadow:0 20px 50px rgba(80,50,30,.22);transform:rotate(${r}deg)">`,
+          )
+          .join("")
+      : "";
+    await page.setContent(
+      `<html><body style="margin:0;width:${W}px;height:${H}px;overflow:hidden;position:relative;font-family:'Yu Gothic','Meiryo',sans-serif;
+        background:${KNIT_BG},linear-gradient(180deg,#f6e9df 0%,#efdcd0 100%);background-size:44px 44px,auto">
+        ${floating}
+        <div style="position:relative;text-align:center;padding-top:${phone ? 130 : 100}px">
+          <div style="color:#4e2f22;font-weight:800;font-size:${titleSize}px;line-height:1.28;letter-spacing:2px">${lines.join("<br>")}</div>
+          ${s.sub ? `<div style="margin-top:${phone ? 28 : 22}px;color:#8e5a44;font-weight:700;font-size:${phone ? 48 : 50}px">${s.sub}</div>` : ""}
+          ${badges}
+        </div>
+        <img src="${img}" style="position:relative;display:block;margin:${phone ? 90 : 70}px auto 0;width:${shotW}px;border-radius:${radius}px;
+          border:${frame}px solid #241c18;box-shadow:0 40px 90px rgba(78,47,34,.32)">
+      </body></html>`,
+      { waitUntil: "load" },
+    );
+    await page.waitForTimeout(250);
+    writeFileSync(join(dir, `${String(i + 1).padStart(2, "0")}-${s.key}.png`), await page.screenshot({ type: "png" }));
   }
   await page.close();
 }
@@ -280,14 +410,11 @@ async function compose(device, shots) {
 for (const device of ["iphone", "ipad"]) {
   const shots = await capture(device);
   await compose(device, shots);
-  // サブスクリプション審査用（購入画面そのもの）
   if (device === "iphone") {
     mkdirSync(join(OUT, "review"), { recursive: true });
     writeFileSync(join(OUT, "review", "paywall.png"), shots.paywall);
   }
-  console.log(`${device}: ${captions.length} screenshots`);
+  console.log(`${device}: ${slides.length} screenshots`);
 }
-writeFileSync(join(TMP, "sample-ja.pdf"), pdfJa);
 await browser.close();
 await server.close();
-void readFileSync;
