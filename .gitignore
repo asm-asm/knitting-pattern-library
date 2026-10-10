@@ -11,3 +11,4 @@ public/pdfjs
 *.p8.txt
 .p8*
 AuthKey_*
+store/screenshots/_tmp
