@@ -121,6 +121,7 @@ await step("ホームに制作中の作品が表示される", async () => {
 const canvasReady = (n) =>
   page.waitForFunction((n) => (document.querySelector(`.page-box[data-page="${n}"] canvas`)?.width ?? 0) > 0, n);
 const pageSelect = () => page.getByLabel("ページ移動");
+const scrollViewerTop = () => page.evaluate(() => document.querySelector(".viewer-scroll").scrollTo(0, 0));
 const fileSelect = () => page.getByLabel("表示するファイル");
 
 await step("PDFビューア：原本と日本語版を別々に開き、閲覧位置をファイルごとに保持", async () => {
@@ -182,6 +183,7 @@ await step("書き込み：マーカー・メモが再読み込み後も同じ�
   await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
   await pageSelect().selectOption("0");
   await canvasReady(1);
+  await scrollViewerTop();
   await page.getByRole("button", { name: "書込" }).click();
   const layer = page.locator('.page-box[data-page="1"] .annot-layer');
   const box = await layer.boundingBox();
@@ -235,6 +237,7 @@ await step("書き込み：マーカー・メモが再読み込み後も同じ�
 
   // 消しゴム → 元に戻す
   mark("eraser");
+  await scrollViewerTop();
   await page.getByRole("button", { name: "書込" }).click();
   await page.locator(".annot-toolbar").getByRole("button", { name: "消しゴム" }).click();
   const b2 = await layer.boundingBox();
@@ -268,6 +271,77 @@ await step("オフラインでも起動・閲覧・編集できる", async () =>
   await canvasReady(6);
   await shot("07-offline-viewer");
   await context.setOffline(false);
+});
+
+await step("完全バックアップ → 全データ削除 → 復元", async () => {
+  await page.goto(base + "#/settings");
+  mark("backup");
+  await page.getByRole("button", { name: "完全バックアップを作成（PDF・画像を含む）" }).click();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "ファイルを保存" }).click();
+  const download = await downloadPromise;
+  const backupPath = join(outDir, download.suggestedFilename());
+  await download.saveAs(backupPath);
+  if (!/^knitting-library-backup-\d{8}-\d{4}\.zip$/.test(download.suggestedFilename())) throw new Error("ファイル名が想定外: " + download.suggestedFilename());
+  await page.getByText(/最後のバックアップ：\d/).waitFor();
+
+  mark("wipe");
+  await page.getByRole("button", { name: "すべてのデータを削除" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "次へ" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "すべて削除" }).click();
+  await page.locator(".toast", { hasText: "すべてのデータを削除しました" }).waitFor();
+  await page.goto(base);
+  await page.getByText("編み図ライブラリへようこそ").waitFor();
+
+  mark("restore");
+  await page.goto(base + "#/settings");
+  await page.locator('input[type=file][accept*=".zip"]').setInputFiles(backupPath);
+  await page.getByRole("dialog").getByText("作品2件").waitFor();
+  await shot("12-restore-dialog");
+  await page.getByRole("dialog").getByRole("button", { name: "追加で復元" }).click();
+  await page.locator(".toast", { hasText: "作品2件" }).waitFor();
+
+  mark("verify");
+  await page.goto(base + "#/library");
+  await page.getByText("ケーブル編みのセーター").click();
+  await page.locator(".counter-num").nth(1).waitFor();
+  if ((await page.locator(".counter-num").allTextContents()).join(",") !== "0,1") throw new Error("カウンターが復元されていない");
+  await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
+  await canvasReady(1);
+  await page.locator('.page-box[data-page="1"] .note-pin').waitFor();
+
+  // 同じバックアップをもう一度「追加で復元」しても重複しない
+  mark("restore-twice");
+  await page.goto(base + "#/settings");
+  await page.locator('input[type=file][accept*=".zip"]').setInputFiles(backupPath);
+  await page.getByRole("dialog").getByRole("button", { name: "追加で復元" }).click();
+  await page.locator(".toast", { hasText: "すでに登録済みの作品2件" }).waitFor();
+});
+
+await step("ファイル本体が失われている場合はエラーを表示する", async () => {
+  // IndexedDB からファイル本体だけを直接削除して、データ欠損を再現する
+  await page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const req = indexedDB.open("knitting-pattern-library");
+        req.onsuccess = () => {
+          const idb = req.result;
+          const tx = idb.transaction(["files", "blobs"], "readwrite");
+          tx.objectStore("files").getAll().onsuccess = (e) => {
+            const f = e.target.result.find((x) => x.name.includes("日本語"));
+            tx.objectStore("blobs").delete(f.blobId);
+          };
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.goto(base + "#/library");
+  await page.getByText("ケーブル編みのセーター").click();
+  await page.getByRole("link", { name: /ケーブルセーター_日本語\.pdf/ }).click();
+  await page.getByText("ファイルの本体が見つかりません").waitFor();
+  await shot("13-missing-file");
+  await page.getByRole("link", { name: "作品に戻る" }).click();
 });
 
 await step("作品の削除（確認あり）", async () => {

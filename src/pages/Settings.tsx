@@ -7,6 +7,7 @@ import { useFeedback } from "../components/Feedback";
 import { formatBytes } from "../lib/format";
 import { requestPersistentStorage } from "../lib/importFiles";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
+import { BackupSettings } from "../components/BackupSettings";
 
 export default function Settings() {
   return (
@@ -16,6 +17,7 @@ export default function Settings() {
       </header>
       <CategorySettings />
       <ViewerSettings />
+      <BackupSettings />
       <StorageSettings />
       <PrivacyInfo />
     </div>
@@ -209,7 +211,7 @@ function StorageSettings() {
       <div className="note-box">
         <p>
           <strong>データの削除について：</strong>
-          作品やファイルは、それぞれの詳細画面から削除できます。アプリ（またはブラウザのサイトデータ）を削除すると、端末内のすべての作品・PDF・メモが消えます。
+          作品やファイルは、それぞれの詳細画面から削除できます。すべてのデータを削除する場合は「バックアップと復元」の一番下から操作できます。アプリ（またはブラウザのサイトデータ）を削除すると、端末内のすべての作品・PDF・メモが消えます。消える前に完全バックアップを作成しておくと、別の端末やアプリの再インストール後に復元できます。
         </p>
       </div>
     </section>

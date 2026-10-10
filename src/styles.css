@@ -388,3 +388,12 @@ details.form-section[open] > summary { margin-bottom: 16px; }
 .annot-list-head { display: flex; align-items: center; gap: 8px; }
 .annot-list-head .muted { flex: 1; }
 .annot-note-text { margin: 6px 0 0; padding-left: 10px; border-left: 3px solid #f0a43a; white-space: pre-wrap; font-size: 0.92rem; }
+
+/* バックアップ */
+.backup-actions { display: grid; gap: 8px; margin: 12px 0; }
+.backup-actions .btn { white-space: normal; }
+.busy { color: var(--primary); font-weight: 600; }
+.ready-box { padding: 10px 14px 14px; }
+.warn { color: var(--danger); }
+.modal-actions.stack { flex-direction: column; }
+.danger-zone.wipe { margin-top: 20px; }

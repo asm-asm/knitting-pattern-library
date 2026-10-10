@@ -83,7 +83,9 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
     const el = scrollRef.current!;
     const ro = new ResizeObserver(() => {
       const prev = sizeRef.current;
-      if (prev.w && !pending.current) {
+      // 幅が変わった（回転など）ときだけ表示位置を補正する。
+      // ツールバーやパネルの開閉で高さだけ変わった場合は、内容が動かないようそのままにする。
+      if (prev.w && prev.w !== el.clientWidth && !pending.current) {
         pending.current = { anchor: anchorAt(layoutRef.current, el.scrollLeft, el.scrollTop, 0, prev.h * FOCUS_RATIO), vx: 0, vy: el.clientHeight * FOCUS_RATIO };
       }
       setSize({ w: el.clientWidth, h: el.clientHeight });
