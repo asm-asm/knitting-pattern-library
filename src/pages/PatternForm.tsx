@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import type { Pattern, PatternStatus } from "../db/types";
 import type { PatternInput } from "../db/repo";
 import { CURRENCIES } from "../lib/format";
 import { CategoryPicker, StatusPicker, TagInput } from "../components/Inputs";
+import { useFeedback } from "../components/Feedback";
+import { canFetchUrlInfo, fetchPageInfo } from "../lib/fetchUrl";
+import type { PageInfo } from "../lib/urlInfo";
 
 export interface FormValues {
   title: string;
@@ -130,17 +133,89 @@ export function PatternFields({
   values,
   onChange,
   extraBasic,
+  onUrlInfo,
+  autoFetch = false,
+  replaceableTitle,
 }: {
   values: FormValues;
   onChange: (v: FormValues) => void;
   /** 基本情報の下に差し込む（新規登録時のファイル選択など） */
   extraBasic?: ReactNode;
+  /** URL から情報を読み込んだとき（表紙画像の取得などに使う） */
+  onUrlInfo?: (info: PageInfo) => void;
+  /** URL を入力したら自動で読み込む */
+  autoFetch?: boolean;
+  /** このタイトル（ファイル名から自動で入れたもの）なら URL の情報で置き換えてよい */
+  replaceableTitle?: string;
 }) {
   const categories = useLiveQuery(() => db.categories.orderBy("order").toArray(), []) ?? [];
-  const set = <K extends keyof FormValues>(k: K, v: FormValues[K]) => onChange({ ...values, [k]: v });
+  const { toast, showError } = useFeedback();
+  // 通信を待っている間に入力された内容を消さないよう、最新の値を参照する
+  const latest = useRef(values);
+  latest.current = values;
+  const update = (v: FormValues) => {
+    latest.current = v;
+    onChange(v);
+  };
+  const set = <K extends keyof FormValues>(k: K, v: FormValues[K]) => update({ ...latest.current, [k]: v });
   const [openDetails, setOpenDetails] = useState(
     () => !!(values.designer || values.shopName || values.price || values.yarn || values.needles),
   );
+  const [fetching, setFetching] = useState(false);
+  const fetchedUrl = useRef<string | null>(null);
+  const canFetch = canFetchUrlInfo();
+
+  const loadFromUrl = async (silent = false) => {
+    const url = latest.current.purchaseUrl.trim();
+    if (!url || fetching) return;
+    fetchedUrl.current = url;
+    setFetching(true);
+    try {
+      const info = await fetchPageInfo(url);
+      const v = { ...latest.current };
+      const filled: string[] = [];
+      // 入力済みの項目は上書きしない
+      const fill = (k: "title" | "designer" | "shopName" | "yarn" | "needles" | "size" | "gauge", val: string | undefined, label: string) => {
+        if (val && !v[k].trim()) {
+          v[k] = val;
+          filled.push(label);
+        }
+      };
+      if (info.title && replaceableTitle && v.title === replaceableTitle) v.title = "";
+      fill("title", info.title, "タイトル");
+      fill("designer", info.designer, "デザイナー");
+      fill("shopName", info.shopName, "ショップ名");
+      if (info.price !== undefined && !v.price.trim()) {
+        v.price = String(info.price);
+        if (info.currency && CURRENCIES.includes(info.currency)) v.currency = info.currency;
+        filled.push("価格");
+      }
+      fill("yarn", info.yarn, "糸");
+      fill("needles", info.needles, "針");
+      fill("gauge", info.gauge, "ゲージ");
+      fill("size", info.size, "サイズ");
+      if (!v.categoryIds.length) {
+        const ids = categories.filter((c) => info.categoryHints.includes(c.name)).map((c) => c.id);
+        if (ids.length) {
+          v.categoryIds = ids;
+          filled.push("カテゴリ");
+        }
+      }
+      update(v);
+      if (filled.some((x) => x !== "タイトル")) setOpenDetails(true);
+      onUrlInfo?.(info);
+      if (filled.length) toast(`URLから読み込みました：${filled.join("・")}${info.imageUrl ? "・画像" : ""}`);
+      else if (!silent) toast(info.imageUrl ? "URLから画像を読み込みました" : "新しく入力できる情報は見つかりませんでした");
+    } catch (e) {
+      showError(e, "URLから情報を読み込めませんでした。手入力してください。");
+    } finally {
+      setFetching(false);
+    }
+  };
+  const maybeAutoFetch = () => {
+    const url = latest.current.purchaseUrl.trim();
+    if (autoFetch && canFetch && /^(https?:\/\/)?[^\s/]+\.[^\s]+/.test(url) && fetchedUrl.current !== url) void loadFromUrl(true);
+  };
   const suggestion = values.purchaseUrl && !values.title ? titleFromUrl(values.purchaseUrl) : undefined;
 
   return (
@@ -152,7 +227,11 @@ export function PatternFields({
         <Field
           label="購入先URL"
           htmlFor="f-url"
-          hint="タイトルや画像の自動取得は行いません。必要な情報は手入力してください。"
+          hint={
+            canFetch
+              ? "URLを入力すると、タイトル・画像・購入情報などを読み込みます（入力済みの項目は上書きしません）。"
+              : "ブラウザ版ではURLから情報を読み込めません。必要な情報は手入力してください。"
+          }
         >
           <input
             id="f-url"
@@ -164,14 +243,21 @@ export function PatternFields({
             placeholder="https://"
             value={values.purchaseUrl}
             onChange={(e) => set("purchaseUrl", e.target.value)}
+            onPaste={() => setTimeout(maybeAutoFetch, 0)}
             onBlur={() => {
-              if (values.purchaseUrl && !values.shopName) {
+              if (!canFetch && values.purchaseUrl && !values.shopName) {
                 const shop = shopFromUrl(values.purchaseUrl);
                 if (shop) set("shopName", shop);
               }
+              maybeAutoFetch();
             }}
           />
-          {suggestion && (
+          {canFetch && values.purchaseUrl.trim() && (
+            <button type="button" className="btn btn-small btn-accent suggest" disabled={fetching} onClick={() => loadFromUrl()}>
+              {fetching ? "読み込み中…" : "URLから情報を読み込む"}
+            </button>
+          )}
+          {suggestion && !canFetch && (
             <button type="button" className="btn btn-small suggest" onClick={() => set("title", suggestion)}>
               タイトルに「{suggestion}」を使う
             </button>

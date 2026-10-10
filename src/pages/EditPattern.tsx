@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
-import { updatePattern } from "../db/repo";
+import { setPatternCover, updatePattern } from "../db/repo";
+import { fetchImage } from "../lib/fetchUrl";
+import { readImage } from "../lib/importFiles";
 import { useFeedback } from "../components/Feedback";
 import { EmptyState } from "../components/PatternParts";
 import { PatternFields, valuesFromPattern, valuesToInput, type FormValues } from "./PatternForm";
@@ -48,7 +50,16 @@ export default function EditPattern() {
           保存
         </button>
       </header>
-      <PatternFields values={values} onChange={setValues} />
+      <PatternFields
+        values={values}
+        onChange={setValues}
+        onUrlInfo={async (info) => {
+          // 表紙がまだない場合だけ、購入先ページの画像を表紙にする
+          if (!info.imageUrl || pattern?.coverBlobId) return;
+          const img = await fetchImage(info.imageUrl);
+          if (img) await setPatternCover(id, await readImage(img)).catch(() => undefined);
+        }}
+      />
       <div className="form-footer">
         <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
           変更を保存する

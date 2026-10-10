@@ -22,6 +22,7 @@ import { CounterList, NotesEditor } from "../components/Counters";
 import { formatBytes, formatDate, formatPrice } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
 import { inspectPdf } from "../lib/pdf";
+import { canFetchUrlInfo, fetchImage, fetchPageInfo } from "../lib/fetchUrl";
 
 /** 「続きから編む」で開くファイル：最後に開いたもの → 日本語版 → 先頭 */
 export function primaryFile(files: PatternFile[]): PatternFile | undefined {
@@ -181,6 +182,23 @@ function CoverEditor({ pattern, files }: { pattern: Pattern; files: PatternFile[
     }
   };
 
+  const fromUrl = async () => {
+    setOpen(false);
+    if (!pattern.purchaseUrl) return;
+    try {
+      toast("購入先ページから画像を読み込んでいます…");
+      const info = await fetchPageInfo(pattern.purchaseUrl);
+      const img = info.imageUrl ? await fetchImage(info.imageUrl) : undefined;
+      if (!img) {
+        toast("購入先ページに使える画像が見つかりませんでした。端末から画像を選んでください。", "error");
+        return;
+      }
+      await setPatternCover(pattern.id, await readImage(img));
+    } catch (e) {
+      showError(e);
+    }
+  };
+
   return (
     <div className="cover-editor">
       <button type="button" className="cover-btn" onClick={() => setOpen((o) => !o)} aria-label="表紙画像を変更">
@@ -189,8 +207,13 @@ function CoverEditor({ pattern, files }: { pattern: Pattern; files: PatternFile[
       </button>
       {open && (
         <div className="menu" role="menu">
+          {pattern.purchaseUrl && canFetchUrlInfo() && (
+            <button role="menuitem" onClick={fromUrl}>
+              購入先ページの画像を使う
+            </button>
+          )}
           <button role="menuitem" onClick={() => (setOpen(false), input.current?.click())}>
-            画像を選ぶ
+            端末から画像を選ぶ
           </button>
           {firstPdf && (
             <button role="menuitem" onClick={fromPdf}>

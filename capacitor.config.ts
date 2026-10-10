@@ -5,8 +5,7 @@ const config: CapacitorConfig = {
   appName: "編み図ライブラリ",
   webDir: "dist",
   ios: {
-    // PDF の閲覧中にページ全体がバウンドしないようにする
-    scrollEnabled: false,
+    // ノッチ・ホームバー部分の余白は CSS（safe-area-inset）で調整する
     contentInset: "never",
   },
 };

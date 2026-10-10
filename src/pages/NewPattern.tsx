@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPattern, type ImageInput } from "../db/repo";
 import { FileSelection, type PendingFile } from "../components/Inputs";
@@ -7,6 +7,7 @@ import { prepareFiles, readImage, requestPersistentStorage } from "../lib/import
 import { stripExtension } from "../lib/format";
 import { Field, PatternFields, emptyValues, valuesToInput } from "./PatternForm";
 import { clearHandoff, peekHandoff } from "./Import";
+import { fetchImage } from "../lib/fetchUrl";
 
 export default function NewPattern() {
   const navigate = useNavigate();
@@ -20,6 +21,12 @@ export default function NewPattern() {
   });
   useEffect(() => clearHandoff(), []);
   const [coverFile, setCoverFile] = useState<File>();
+  // URL から取得した表紙か（自分で選んだ画像は URL の画像で置き換えない）
+  const [coverFromUrl, setCoverFromUrl] = useState(false);
+  const [loadingCover, setLoadingCover] = useState(false);
+  const coverPreview = useMemo(() => (coverFile ? URL.createObjectURL(coverFile) : undefined), [coverFile]);
+  useEffect(() => () => void (coverPreview && URL.revokeObjectURL(coverPreview)), [coverPreview]);
+  const autoTitle = files[0] ? stripExtension(files[0].file.name) : undefined;
   const [pdfCover, setPdfCover] = useState(true);
   const [busy, setBusy] = useState(false);
   const coverInput = useRef<HTMLInputElement>(null);
@@ -67,6 +74,18 @@ export default function NewPattern() {
       <PatternFields
         values={values}
         onChange={setValues}
+        autoFetch
+        replaceableTitle={autoTitle}
+        onUrlInfo={async (info) => {
+          if (!info.imageUrl || (coverFile && !coverFromUrl)) return;
+          setLoadingCover(true);
+          const img = await fetchImage(info.imageUrl);
+          setLoadingCover(false);
+          if (img) {
+            setCoverFile(img);
+            setCoverFromUrl(true);
+          }
+        }}
         extraBasic={
           <>
             <Field label="ファイル（PDF・画像）" hint="英語原本と日本語版など、複数のファイルを1つの作品にまとめられます。URLだけ・ファイルだけの登録もできます。">
@@ -74,25 +93,37 @@ export default function NewPattern() {
             </Field>
             <Field label="表紙画像">
               <div className="cover-pick">
-                <button type="button" className="btn" onClick={() => coverInput.current?.click()}>
-                  {coverFile ? "画像を変更" : "画像を選ぶ"}
-                </button>
-                {coverFile && (
-                  <>
-                    <span className="break small">{coverFile.name}</span>
-                    <button type="button" className="icon-btn" aria-label="表紙画像を取り消す" onClick={() => setCoverFile(undefined)}>
-                      ×
+                {coverPreview && <img className="cover-preview" src={coverPreview} alt="表紙画像" />}
+                <div className="cover-pick-actions">
+                  {loadingCover && <span className="small muted">URLから画像を読み込み中…</span>}
+                  {coverFile && coverFromUrl && <span className="small muted">購入先ページの画像</span>}
+                  <button type="button" className="btn" onClick={() => coverInput.current?.click()}>
+                    {coverFile ? "別の画像を選ぶ" : "端末から画像を選ぶ"}
+                  </button>
+                  {coverFile && (
+                    <button
+                      type="button"
+                      className="btn btn-danger-text"
+                      onClick={() => {
+                        setCoverFile(undefined);
+                        setCoverFromUrl(false);
+                      }}
+                    >
+                      表紙を外す
                     </button>
-                  </>
-                )}
+                  )}
+                </div>
                 <input
                   ref={coverInput}
                   type="file"
                   accept="image/*"
                   hidden
                   onChange={(e) => {
-                    setCoverFile(e.target.files?.[0]);
+                    const f = e.target.files?.[0];
                     e.target.value = "";
+                    if (!f) return;
+                    setCoverFile(f);
+                    setCoverFromUrl(false);
                   }}
                 />
               </div>
