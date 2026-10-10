@@ -88,7 +88,7 @@ export default function Import() {
       </header>
 
       <section className="form-section">
-        <p className="hint">ファイルの種類（英語原本・日本語翻訳版など）を確認してください。</p>
+        <p className="hint">ファイルの種類（英語原本・日本語翻訳版など）を確認してください。ファイルはアプリ内にコピーして保存するので、登録後に元のファイルを削除しても大丈夫です。</p>
         <FileSelection value={pending} onChange={setPending} />
       </section>
 

@@ -89,7 +89,7 @@ export default function NewPattern() {
         }}
         extraBasic={
           <>
-            <Field label="ファイル（PDF・画像）" hint="英語原本と日本語版など、複数のファイルを1つの作品にまとめられます。URLだけ・ファイルだけの登録もできます。">
+            <Field label="ファイル（PDF・画像）" hint="英語原本と日本語版など、複数のファイルを1つの作品にまとめられます。URLだけ・ファイルだけの登録もできます。選んだファイルはアプリ内にコピーして保存するので、登録後に元のファイルを削除しても大丈夫です。">
               <FileSelection value={files} onChange={onFiles} />
             </Field>
             <Field label="表紙画像">
