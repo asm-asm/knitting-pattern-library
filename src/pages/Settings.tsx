@@ -8,6 +8,9 @@ import { formatBytes } from "../lib/format";
 import { requestPersistentStorage } from "../lib/importFiles";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
 import { BackupSettings } from "../components/BackupSettings";
+import { ExternalLinkButton } from "../components/Inputs";
+
+const RAVELRY_JA_SEARCH_URL = "https://ravely-one.vercel.app/";
 
 export default function Settings() {
   return (
@@ -15,12 +18,33 @@ export default function Settings() {
       <header className="page-header">
         <h1>設定</h1>
       </header>
+      <LinkSection />
       <CategorySettings />
       <ViewerSettings />
       <BackupSettings />
       <StorageSettings />
       <PrivacyInfo />
     </div>
+  );
+}
+
+function LinkSection() {
+  return (
+    <section className="section">
+      <h2 className="section-title">編みたい作品を探す</h2>
+      <div className="link-card">
+        <div>
+          <p className="link-card-title">Ravelry 日本語検索</p>
+          <p className="hint">日本語のキーワードやタグで Ravelry のパターンを探せる検索ページです。</p>
+        </div>
+        <ExternalLinkButton
+          url={RAVELRY_JA_SEARCH_URL}
+          label="開く"
+          pageName="Ravelry 日本語検索"
+          className="btn btn-accent"
+        />
+      </div>
+    </section>
   );
 }
 

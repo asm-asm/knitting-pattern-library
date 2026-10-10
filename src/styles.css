@@ -397,3 +397,8 @@ details.form-section[open] > summary { margin-bottom: 16px; }
 .warn { color: var(--danger); }
 .modal-actions.stack { flex-direction: column; }
 .danger-zone.wipe { margin-top: 20px; }
+
+/* 外部リンク */
+.link-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
+.link-card-title { font-weight: 700; margin: 0; }
+.link-card .hint { margin: 2px 0 0; }

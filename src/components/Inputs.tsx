@@ -7,7 +7,17 @@ import { useFeedback } from "./Feedback";
 import { useOnline } from "../hooks/hooks";
 
 /** 購入先などの外部URLを開く。外部サイトへ移動することを事前に確認する。 */
-export function ExternalLinkButton({ url, label = "購入先を開く" }: { url: string; label?: string }) {
+export function ExternalLinkButton({
+  url,
+  label = "購入先を開く",
+  pageName = "購入先のページ",
+  className = "btn btn-link-ext",
+}: {
+  url: string;
+  label?: string;
+  pageName?: string;
+  className?: string;
+}) {
   const { confirm } = useFeedback();
   const online = useOnline();
   let host = url;
@@ -19,14 +29,14 @@ export function ExternalLinkButton({ url, label = "購入先を開く" }: { url:
   return (
     <button
       type="button"
-      className="btn btn-link-ext"
+      className={className}
       onClick={async () => {
         const ok = await confirm({
           title: "外部サイトを開きます",
           message: (
             <>
               <p className="break">{host}</p>
-              <p>ブラウザで購入先のページを開きます。{online ? "" : "現在オフラインのため、ページが表示されない可能性があります。"}</p>
+              <p>ブラウザで{pageName}を開きます。{online ? "" : "現在オフラインのため、ページが表示されない可能性があります。"}</p>
             </>
           ),
           confirmLabel: "開く",
