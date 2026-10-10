@@ -223,6 +223,20 @@ async function capture(device) {
   });
   await settle();
   shots.privacy = await page.screenshot();
+
+  // プレミアムの案内（6件目を登録しようとしたとき）。開発サーバー専用の表示切り替えで、購入画面を再現する
+  await page.goto(base + "#/");
+  await page.evaluate(async () => {
+    const m = await import("/src/lib/premium.ts");
+    m.__previewPremium(
+      { enforced: true, active: false, checking: false },
+      { id: m.PREMIUM_PRODUCT_ID, displayName: "プレミアム（月額）", description: "", displayPrice: "¥150", price: 150, period: { unit: "month", value: 1 } },
+    );
+  });
+  await page.goto(base + "#/new");
+  await page.locator(".paywall-buy").waitFor();
+  await settle();
+  shots.paywall = await page.screenshot();
   await ctx.close();
   return shots;
 }
@@ -236,6 +250,7 @@ const captions = [
   ["annotate", "マーカーとメモで", "編み図に書き込み"],
   ["library", "編みたい作品も完成品も", "すっきり整理"],
   ["privacy", "アカウント不要。", "データは端末の中だけ"],
+  ["paywall", "5作品まで無料。", "それ以上は月額150円で無制限"],
 ];
 
 async function compose(device, shots) {
@@ -248,8 +263,11 @@ async function compose(device, shots) {
   for (const [key, l1, l2] of captions) {
     const img = `data:image/png;base64,${shots[key].toString("base64")}`;
     const shotW = phone ? 1060 : 1560;
+    // 長い見出しは、端からはみ出さないよう文字を小さくする
+    const maxChars = Math.max(l1.length, l2.length);
+    const fontSize = Math.min(phone ? 92 : 104, Math.floor((W * 0.86) / maxChars));
     await page.setContent(`<html><body style="margin:0;width:${W}px;height:${H}px;overflow:hidden;background:linear-gradient(180deg,#f3e6dc,#efe0d3);font-family:'Yu Gothic','Meiryo',sans-serif">
-      <div style="text-align:center;padding-top:${phone ? 150 : 120}px;color:#5a3a2c;font-weight:800;font-size:${phone ? 92 : 104}px;line-height:1.3;letter-spacing:2px">${l1}<br>${l2}</div>
+      <div style="text-align:center;padding-top:${phone ? 150 : 120}px;color:#5a3a2c;font-weight:800;font-size:${fontSize}px;line-height:1.3;letter-spacing:2px">${l1}<br>${l2}</div>
       <img src="${img}" style="display:block;margin:${phone ? 110 : 90}px auto 0;width:${shotW}px;border-radius:${phone ? 64 : 40}px;box-shadow:0 30px 80px rgba(90,58,44,.28);border:${phone ? 14 : 12}px solid #2b2522">
       </body></html>`);
     await page.waitForTimeout(200);
@@ -262,6 +280,11 @@ async function compose(device, shots) {
 for (const device of ["iphone", "ipad"]) {
   const shots = await capture(device);
   await compose(device, shots);
+  // サブスクリプション審査用（購入画面そのもの）
+  if (device === "iphone") {
+    mkdirSync(join(OUT, "review"), { recursive: true });
+    writeFileSync(join(OUT, "review", "paywall.png"), shots.paywall);
+  }
   console.log(`${device}: ${captions.length} screenshots`);
 }
 writeFileSync(join(TMP, "sample-ja.pdf"), pdfJa);

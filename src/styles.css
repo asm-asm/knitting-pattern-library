@@ -441,3 +441,4 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .paywall-buy { min-height: 56px; font-size: 1.05rem; border-radius: var(--radius); }
 .paywall-legal { color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
 .paywall-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.paywall { max-width: 640px; margin: 0 auto; }

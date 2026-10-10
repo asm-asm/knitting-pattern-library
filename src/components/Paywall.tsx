@@ -19,7 +19,8 @@ export function usePremium() {
   return useSyncExternalStore(subscribePremium, getPremiumState);
 }
 
-const PERIOD_LABEL: Record<string, string> = { day: "日", week: "週", month: "か月", year: "年" };
+const PERIOD_ONE: Record<string, string> = { day: "日", week: "週", month: "月", year: "年" };
+const PERIOD_MANY: Record<string, string> = { day: "日", week: "週間", month: "か月", year: "年" };
 
 /**
  * プレミアムの案内と購入画面。
@@ -43,7 +44,11 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
     };
   }, [reload]);
 
-  const period = product?.period ? `${product.period.value === 1 ? "" : product.period.value}${PERIOD_LABEL[product.period.unit]}` : "1か月";
+  const period = product?.period
+    ? product.period.value === 1
+      ? PERIOD_ONE[product.period.unit]
+      : `${product.period.value}${PERIOD_MANY[product.period.unit]}`
+    : "月";
   const priceLabel = product ? `${product.displayPrice} / ${period}` : "月額 150円";
 
   if (premium.active) {
