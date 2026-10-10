@@ -5,3 +5,9 @@ public/pdfjs
 *.local
 .DS_Store
 *.tsbuildinfo
+
+# Apple の秘密鍵は絶対にコミットしない
+*.p8
+*.p8.txt
+.p8*
+AuthKey_*
