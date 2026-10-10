@@ -107,6 +107,18 @@ describe("本・電子書籍の登録", () => {
     expect(all.find((p) => p.title === "ミトン")).toMatchObject({ sourceBookId: book, sourcePage: "24" });
   });
 
+  it("本を削除しても作品は残り、掲載情報だけが外れる", async () => {
+    const { deletePattern, getPatternDeletionSummary } = await import("../db/repo");
+    const book = await createPattern({ ...base, title: "本", itemType: "book" }, [], undefined, db);
+    const p = await createPattern({ ...base, title: "作品", sourceBookId: book, sourcePage: "12" }, [], undefined, db);
+    expect((await getPatternDeletionSummary(book, db)).linkedPatterns).toBe(1);
+    await deletePattern(book, db);
+    const after = (await db.patterns.get(p))!;
+    expect(after.title).toBe("作品");
+    expect(after.sourceBookId).toBeUndefined();
+    expect(after.sourcePage).toBeUndefined();
+  });
+
   it("種類で絞り込め、著者・出版社でも検索できる", async () => {
     const items = [
       { id: "1", title: "セーター", itemType: undefined },

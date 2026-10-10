@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useFeedback } from "./Feedback";
 import { ExternalLinkButton } from "./Inputs";
 import {
+  FREE_BOOK_LIMIT,
   FREE_PATTERN_LIMIT,
   PRIVACY_URL,
   TERMS_URL,
@@ -26,7 +27,23 @@ const PERIOD_MANY: Record<string, string> = { day: "日", week: "週間", month:
  * プレミアムの案内と購入画面。
  * reason="limit"：6件目を登録しようとしたとき／"info"：設定から開いたとき
  */
-export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "info"; patternCount?: number; onClose?: () => void }) {
+export function Paywall({
+  reason,
+  kind = "pattern",
+  patternCount,
+  onClose,
+}: {
+  reason: "limit" | "info";
+  /** 上限に達したのが編み図か本か */
+  kind?: "pattern" | "book";
+  /** いまの登録数（kind に合わせた数） */
+  patternCount?: number;
+  onClose?: () => void;
+}) {
+  const book = kind === "book";
+  const limit = book ? FREE_BOOK_LIMIT : FREE_PATTERN_LIMIT;
+  const unit = book ? "冊" : "件";
+  const noun = book ? "本・電子書籍" : "作品";
   const premium = usePremium();
   const { toast, showError } = useFeedback();
   const [product, setProduct] = useState<StoreProduct | null>();
@@ -67,7 +84,7 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
       <div className="paywall">
         <div className="paywall-badge">プレミアム</div>
         <h2 className="paywall-title">プレミアムをご利用中です</h2>
-        <p>作品の登録数に上限はありません。</p>
+        <p>作品・本の登録数に上限はありません。</p>
         {premium.expiresAt && <p className="muted small">次回の自動更新日：{formatDate(premium.expiresAt)}</p>}
         <p className="muted small">解約や支払い方法の変更は、設定画面の「サブスクリプションを管理」から行えます。</p>
         {onClose && (
@@ -82,17 +99,19 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
   return (
     <div className="paywall">
       <div className="paywall-badge">プレミアム</div>
-      <h2 className="paywall-title">{reason === "limit" ? `無料で登録できるのは${FREE_PATTERN_LIMIT}件までです` : "作品を何件でも登録できます"}</h2>
+      <h2 className="paywall-title">{reason === "limit" ? `無料で登録できる${noun}は${limit}${unit}までです` : "作品も本も、いくつでも登録できます"}</h2>
       {reason === "limit" && (
         <p>
-          いま登録されている作品は{patternCount ?? FREE_PATTERN_LIMIT}件です。6件目以降を登録するには、プレミアム（{priceLabel}）にお申し込みください。
+          いま登録されている{noun}は{patternCount ?? limit}{unit}です。{limit + 1}{unit}目以降を登録するには、プレミアム（{priceLabel}）にお申し込みください。
         </p>
       )}
 
       <ul className="paywall-list">
-        <li>作品の登録数が<strong>無制限</strong>になります</li>
+        <li>
+          作品（編み図）と本・電子書籍の登録数が<strong>無制限</strong>になります（無料版は作品{FREE_PATTERN_LIMIT}件・本{FREE_BOOK_LIMIT}冊まで）
+        </li>
         <li>登録済みの作品の閲覧・編集・PDF・段数カウンターは、これまでどおり無料で使えます</li>
-        <li>作品を削除すれば、無料版でもまた新しく登録できます</li>
+        <li>削除すれば、無料版でもまた新しく登録できます</li>
       </ul>
 
       {product === null && (

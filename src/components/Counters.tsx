@@ -188,7 +188,15 @@ function CounterCard({ counter, compact }: { counter: Counter; compact: boolean 
 }
 
 /** 作品メモ。入力が止まったら自動保存する。 */
-export function NotesEditor({ patternId, initial }: { patternId: string; initial: string | undefined }) {
+export function NotesEditor({
+  patternId,
+  initial,
+  placeholder = "針の号数を変えた、ここで減目した、など",
+}: {
+  patternId: string;
+  initial: string | undefined;
+  placeholder?: string;
+}) {
   const { showError } = useFeedback();
   const [text, setText] = useState(initial ?? "");
   const [state, setState] = useState<"idle" | "dirty" | "saved">("idle");
@@ -217,7 +225,7 @@ export function NotesEditor({ patternId, initial }: { patternId: string; initial
       <textarea
         className="input textarea"
         rows={5}
-        placeholder="針の号数を変えた、ここで減目した、など"
+        placeholder={placeholder}
         value={text}
         aria-label="制作メモ"
         onChange={(e) => {

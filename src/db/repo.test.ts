@@ -137,7 +137,7 @@ describe("削除", () => {
     const note: Annotation = { id: newId(), fileId: fa.id, page: 1, type: "note", x: 0.1, y: 0.1, text: "x", createdAt: now, updatedAt: now };
     await db.annotations.add(note);
 
-    expect(await getPatternDeletionSummary(a, db)).toEqual({ files: 1, counters: 1, annotations: 1 });
+    expect(await getPatternDeletionSummary(a, db)).toEqual({ files: 1, counters: 1, annotations: 1, linkedPatterns: 0 });
     await deletePattern(a, db);
 
     expect(await db.patterns.get(a)).toBeUndefined();

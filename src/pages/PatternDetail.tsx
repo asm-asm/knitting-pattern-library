@@ -15,8 +15,18 @@ import {
   updateFile,
   UserFacingError,
 } from "../db/repo";
-import { FILE_KIND_LABELS, FILE_KIND_ORDER, type FileKind, type Pattern, type PatternFile } from "../db/types";
-import { Cover, EmptyState, FavoriteButton } from "../components/PatternParts";
+import {
+  FILE_KIND_LABELS,
+  FILE_KIND_ORDER,
+  ITEM_TYPE_LABELS,
+  isBookType,
+  itemTypeOf,
+  type FileKind,
+  type Pattern,
+  type PatternFile,
+} from "../db/types";
+import { formatIsbn } from "../lib/isbn";
+import { Cover, EmptyState, FavoriteButton, StatusBadge } from "../components/PatternParts";
 import { ExternalLinkButton, FileKindSelect, FileSelection, StatusPicker, type PendingFile } from "../components/Inputs";
 import { useFeedback } from "../components/Feedback";
 import { CounterList, NotesEditor } from "../components/Counters";
@@ -56,6 +66,8 @@ export default function PatternDetail() {
   if (!pattern || !files) return <div className="page loading">読み込み中…</div>;
 
   const catNames = pattern.categoryIds.map((cid) => categories?.find((c) => c.id === cid)?.name).filter(Boolean);
+  const type = itemTypeOf(pattern);
+  const isBook = isBookType(type);
 
   return (
     <div className="page detail">
@@ -74,15 +86,22 @@ export default function PatternDetail() {
             <h2 className="detail-title">{pattern.title}</h2>
             <FavoriteButton pattern={pattern} />
           </div>
-          {pattern.designer && <p className="muted">デザイン：{pattern.designer}</p>}
-          <StartButton pattern={pattern} files={files} />
+          {isBook && <span className="badge type-badge">{ITEM_TYPE_LABELS[type]}</span>}
+          {!isBook && pattern.designer && <p className="muted">デザイン：{pattern.designer}</p>}
+          {isBook && pattern.author && <p className="muted">著者：{pattern.author}</p>}
+          {!isBook && pattern.sourceBookId && <SourceBook bookId={pattern.sourceBookId} page={pattern.sourcePage} />}
+          {isBook ? <BookActions pattern={pattern} files={files} /> : <StartButton pattern={pattern} files={files} />}
         </div>
       </div>
 
-      <section className="section">
-        <h3 className="section-title">制作ステータス</h3>
-        <StatusChanger pattern={pattern} />
-      </section>
+      {!isBook && (
+        <section className="section">
+          <h3 className="section-title">制作ステータス</h3>
+          <StatusChanger pattern={pattern} />
+        </section>
+      )}
+
+      {isBook && <BookPatterns book={pattern} />}
 
       {(catNames.length > 0 || pattern.tags.length > 0) && (
         <section className="section">
@@ -105,14 +124,21 @@ export default function PatternDetail() {
 
       <PurchaseInfo pattern={pattern} />
 
-      <section className="section">
-        <h3 className="section-title">段数カウンター</h3>
-        <CounterList patternId={pattern.id} />
-      </section>
+      {!isBook && (
+        <section className="section">
+          <h3 className="section-title">段数カウンター</h3>
+          <CounterList patternId={pattern.id} />
+        </section>
+      )}
 
       <section className="section">
-        <h3 className="section-title">制作メモ</h3>
-        <NotesEditor key={pattern.id} patternId={pattern.id} initial={pattern.notes} />
+        <h3 className="section-title">{isBook ? "メモ" : "制作メモ"}</h3>
+        <NotesEditor
+          key={pattern.id}
+          patternId={pattern.id}
+          initial={pattern.notes}
+          placeholder={isBook ? "気になる作品のページ、買った書店、貸した相手など" : undefined}
+        />
       </section>
 
       <DangerZone pattern={pattern} />
@@ -168,6 +194,78 @@ function StartButton({ pattern, files }: { pattern: Pattern; files: PatternFile[
         </button>
       )}
     </div>
+  );
+}
+
+/** 本・電子書籍：電子書籍を開く／ファイルを見る */
+function BookActions({ pattern, files }: { pattern: Pattern; files: PatternFile[] }) {
+  const navigate = useNavigate();
+  const target = primaryFile(files);
+  if (!pattern.ebookUrl && !target) return null;
+  return (
+    <div className={`start-actions ${pattern.ebookUrl && target ? "two" : ""}`}>
+      {pattern.ebookUrl && (
+        <ExternalLinkButton url={pattern.ebookUrl} label="電子書籍を開く" pageName="電子書籍のページ" className="btn btn-primary btn-start" />
+      )}
+      {target && (
+        <button
+          type="button"
+          className={`btn btn-start ${pattern.ebookUrl ? "btn-view" : "btn-primary"}`}
+          onClick={() => navigate(`/patterns/${pattern.id}/files/${target.id}`, { state: BACK_STATE })}
+        >
+          {target.mimeType === "application/pdf" ? "PDFを見る" : "ファイルを見る"}
+          <small className="btn-sub">{target.name}</small>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** 作品：掲載している本へのリンク */
+function SourceBook({ bookId, page }: { bookId: string; page?: string }) {
+  const book = useLiveQuery(() => db.patterns.get(bookId).then((b) => b ?? null), [bookId]);
+  if (!book) return null;
+  return (
+    <p className="muted source-book">
+      掲載：
+      <Link to={`/patterns/${book.id}`} state={BACK_STATE} className="link">
+        『{book.title}』
+      </Link>
+      {page ? ` ${/^\d+$/.test(page) ? `${page}ページ` : page}` : ""}
+    </p>
+  );
+}
+
+/** 本：この本に載っている作品 */
+function BookPatterns({ book }: { book: Pattern }) {
+  const items = useLiveQuery(() => db.patterns.filter((p) => p.sourceBookId === book.id).sortBy("title"), [book.id]);
+  return (
+    <section className="section">
+      <h3 className="section-title">この本の作品</h3>
+      {items && items.length > 0 ? (
+        <ul className="book-patterns">
+          {items.map((p) => (
+            <li key={p.id}>
+              <Link to={`/patterns/${p.id}`} state={BACK_STATE} className="book-pattern">
+                <Cover pattern={p} className="row-thumb" />
+                <span className="row-body">
+                  <span className="row-title">{p.title}</span>
+                  <span className="row-meta">
+                    <StatusBadge status={p.status} />
+                    {p.sourcePage && <span className="muted small">{/^\d+$/.test(p.sourcePage) ? `${p.sourcePage}ページ` : p.sourcePage}</span>}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">この本に載っている作品を登録すると、ここに並びます。</p>
+      )}
+      <Link to={`/new?book=${book.id}`} state={BACK_STATE} className="btn btn-dashed">
+        ＋ この本の作品を登録
+      </Link>
+    </section>
   );
 }
 
@@ -444,6 +542,9 @@ export function exportFileName(file: Pick<PatternFile, "name" | "mimeType">): st
 
 function PurchaseInfo({ pattern }: { pattern: Pattern }) {
   const rows: [string, string | undefined][] = [
+    ["著者", pattern.author],
+    ["出版社", pattern.publisher],
+    ["ISBN", pattern.isbn ? formatIsbn(pattern.isbn) : undefined],
     ["ショップ", pattern.shopName],
     ["購入日", pattern.purchaseDate ? formatDate(new Date(pattern.purchaseDate).getTime()) : undefined],
     ["購入価格", formatPrice(pattern.price, pattern.currency) || undefined],
@@ -493,14 +594,16 @@ function DangerZone({ pattern }: { pattern: Pattern }) {
             s.counters && `段数カウンター${s.counters}件`,
             s.annotations && `注釈${s.annotations}件`,
           ].filter(Boolean);
+          const isBook = isBookType(itemTypeOf(pattern));
           const ok = await confirm({
-            title: "この作品を削除しますか？",
+            title: `この${isBook ? "本" : "作品"}を削除しますか？`,
             message: (
               <>
                 <p className="break">「{pattern.title}」</p>
                 <p>
                   作品情報{parts.length ? `と、${parts.join("・")}` : ""}が端末から削除されます。元に戻せません。
                 </p>
+                {s.linkedPatterns > 0 && <p>この本に結び付いている作品{s.linkedPatterns}件は削除されず、掲載している本の情報だけが外れます。</p>}
                 <p className="muted">他の作品のデータには影響しません。</p>
               </>
             ),
@@ -517,7 +620,7 @@ function DangerZone({ pattern }: { pattern: Pattern }) {
           }
         }}
       >
-        この作品を削除
+        {isBookType(itemTypeOf(pattern)) ? "この本を削除" : "この作品を削除"}
       </button>
     </section>
   );

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
-import { FILE_KIND_LABELS, FILE_KIND_ORDER, STATUS_LABELS, STATUS_ORDER, type FileKind, type PatternFile, type PatternStatus } from "../db/types";
+import { FILE_KIND_LABELS, FILE_KIND_ORDER, STATUS_LABELS, STATUS_ORDER, type FileKind, type PatternFile, type PatternStatus, ITEM_TYPE_LABELS, type ItemType } from "../db/types";
 import { DEFAULT_QUERY, SORT_LABELS, searchPatterns, type LibraryQuery, type SortKey } from "../lib/search";
 import { usePersistentState } from "../hooks/hooks";
 import { EmptyState, PatternCard, PatternRow } from "../components/PatternParts";
@@ -23,8 +23,14 @@ export default function Library() {
   useEffect(() => {
     const status = params.get("status") as PatternStatus | null;
     const fav = params.get("fav") === "1";
-    if (!status && !fav) return;
-    setQuery({ ...DEFAULT_QUERY, statuses: status && STATUS_ORDER.includes(status) ? [status] : [], favoriteOnly: fav });
+    const type = params.get("type");
+    if (!status && !fav && !type) return;
+    setQuery({
+      ...DEFAULT_QUERY,
+      statuses: status && STATUS_ORDER.includes(status) ? [status] : [],
+      favoriteOnly: fav,
+      itemType: type === "pattern" || type === "book" || type === "ebook" ? type : status || fav ? "pattern" : undefined,
+    });
     setParams({}, { replace: true });
   }, [params, setParams, setQuery]);
 
@@ -56,6 +62,21 @@ export default function Library() {
           </button>
         </div>
       </header>
+
+      <div className="type-tabs" role="tablist" aria-label="種類">
+        {([undefined, "pattern", "book", "ebook"] as (ItemType | undefined)[]).map((t) => (
+          <button
+            key={t ?? "all"}
+            type="button"
+            role="tab"
+            aria-selected={query.itemType === t}
+            className={query.itemType === t ? "on" : ""}
+            onClick={() => set("itemType", t)}
+          >
+            {t ? ITEM_TYPE_LABELS[t] : "すべて"}
+          </button>
+        ))}
+      </div>
 
       <div className="search-bar">
         <input
@@ -172,7 +193,7 @@ export default function Library() {
         <div className="loading">読み込み中…</div>
       ) : patterns!.length === 0 ? (
         <EmptyState title="まだ作品が登録されていません">
-          <p>購入した編み図のPDFや、編みたい作品のURLを登録してみましょう。</p>
+          <p>購入した編み図のPDFや、編みたい作品のURL、持っている本を登録してみましょう。</p>
           <Link to="/new" className="btn btn-primary">
             作品を登録する
           </Link>

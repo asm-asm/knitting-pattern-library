@@ -203,6 +203,8 @@ export interface DeletionSummary {
   files: number;
   counters: number;
   annotations: number;
+  /** 本を削除するとき、この本に結び付いている作品の数（作品は削除しない） */
+  linkedPatterns: number;
 }
 
 export async function getPatternDeletionSummary(id: string, db: LibraryDB = defaultDb): Promise<DeletionSummary> {
@@ -211,7 +213,8 @@ export async function getPatternDeletionSummary(id: string, db: LibraryDB = defa
   const annotations = files.length
     ? await db.annotations.where("fileId").anyOf(files.map((f) => f.id)).count()
     : 0;
-  return { files: files.length, counters, annotations };
+  const linkedPatterns = await db.patterns.filter((p) => p.sourceBookId === id).count();
+  return { files: files.length, counters, annotations, linkedPatterns };
 }
 
 /** 作品と、その作品に属するファイル実体・カウンター・注釈をまとめて削除する。他の作品のデータには触れない。 */
@@ -225,6 +228,13 @@ export async function deletePattern(id: string, db: LibraryDB = defaultDb) {
     await db.files.bulkDelete(fileIds);
     await db.counters.where("patternId").equals(id).delete();
     await db.patterns.delete(id);
+    // 本を削除した場合：この本に結び付いている作品から、掲載情報だけを外す（作品は残す）
+    await db.patterns
+      .filter((x) => x.sourceBookId === id)
+      .modify((x) => {
+        delete x.sourceBookId;
+        delete x.sourcePage;
+      });
     return [...files.map((f) => f.blobId), p.coverBlobId];
   });
   await deleteBlobsAfter(db, blobIds);

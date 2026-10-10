@@ -2,11 +2,11 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
-import type { Pattern, PatternFile } from "../db/types";
+import { itemTypeOf, type Pattern, type PatternFile } from "../db/types";
 import { Cover, EmptyState, PatternCard, StatusBadge } from "../components/PatternParts";
 import { BACK_STATE } from "../hooks/navigation";
 import { usePremium } from "../components/Paywall";
-import { FREE_PATTERN_LIMIT } from "../lib/premium";
+import { FREE_BOOK_LIMIT, FREE_PATTERN_LIMIT } from "../lib/premium";
 
 export default function Home() {
   const premium = usePremium();
@@ -22,11 +22,16 @@ export default function Home() {
   if (!patterns) return <div className="page loading">読み込み中…</div>;
   const freeLimit = premium.enforced && !premium.active;
 
-  const byUpdated = [...patterns].sort((a, b) => b.updatedAt - a.updatedAt);
-  const inProgress = patterns
+  // 編み図と本・電子書籍を分ける（以前のデータは編み図）
+  const works = patterns.filter((p) => itemTypeOf(p) === "pattern");
+  const byUpdatedAll = [...patterns].sort((a, b) => b.updatedAt - a.updatedAt);
+  const books = byUpdatedAll.filter((p) => itemTypeOf(p) === "book");
+  const ebooks = byUpdatedAll.filter((p) => itemTypeOf(p) === "ebook");
+  const byUpdated = byUpdatedAll.filter((p) => itemTypeOf(p) === "pattern");
+  const inProgress = works
     .filter((p) => p.status === "in_progress")
     .sort((a, b) => (b.lastOpenedAt ?? b.updatedAt) - (a.lastOpenedAt ?? a.updatedAt));
-  const recent = patterns
+  const recent = works
     .filter((p) => p.lastOpenedAt)
     .sort((a, b) => b.lastOpenedAt! - a.lastOpenedAt!)
     .slice(0, 8);
@@ -55,16 +60,16 @@ export default function Home() {
         <>
           <div className="stats">
             <div className="stat">
-              <span className="stat-num">{patterns.length}</span>
-              <span className="stat-label">{freeLimit ? `登録作品（無料は${FREE_PATTERN_LIMIT}件まで）` : "登録作品"}</span>
+              <span className="stat-num">{works.length}</span>
+              <span className="stat-label">{freeLimit ? `作品（無料は${FREE_PATTERN_LIMIT}件まで）` : "作品"}</span>
             </div>
             <div className="stat">
               <span className="stat-num">{inProgress.length}</span>
               <span className="stat-label">制作中</span>
             </div>
             <div className="stat">
-              <span className="stat-num">{done.length}</span>
-              <span className="stat-label">完成</span>
+              <span className="stat-num">{books.length + ebooks.length}</span>
+              <span className="stat-label">{freeLimit ? `本・電子書籍（無料は${FREE_BOOK_LIMIT}冊まで）` : "本・電子書籍"}</span>
             </div>
           </div>
 
@@ -85,6 +90,9 @@ export default function Home() {
           <Shelf title="編みたい" items={want} filesByPattern={filesByPattern} more="/library?status=want" />
           <Shelf title="お気に入り" items={favorites} filesByPattern={filesByPattern} more="/library?fav=1" />
           <Shelf title="完成した作品" items={done} filesByPattern={filesByPattern} more="/library?status=done" />
+
+          <BookShelf title="持っている本" items={books} type="book" filesByPattern={filesByPattern} />
+          <BookShelf title="電子書籍" items={ebooks} type="ebook" filesByPattern={filesByPattern} />
         </>
       )}
     </div>
@@ -131,6 +139,50 @@ function Shelf({
           <PatternCard key={p.id} pattern={p} files={filesByPattern.get(p.id)} />
         ))}
       </div>
+    </section>
+  );
+}
+
+/** 本・電子書籍の棚。まだ1冊もないときは登録への入口を出す */
+function BookShelf({
+  title,
+  items,
+  type,
+  filesByPattern,
+}: {
+  title: string;
+  items: Pattern[];
+  type: "book" | "ebook";
+  filesByPattern: Map<string, PatternFile[]>;
+}) {
+  return (
+    <section className="section">
+      <div className="section-head">
+        <h2 className="section-title">
+          {title}
+          {items.length > 0 && <span className="muted small"> {items.length}冊</span>}
+        </h2>
+        {items.length > 8 ? (
+          <Link to={`/library?type=${type}`} className="link">
+            すべて見る
+          </Link>
+        ) : (
+          <Link to={`/new?type=${type}`} className="link">
+            ＋ 登録
+          </Link>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <p className="muted">
+          {type === "book" ? "持っている編み物の本を登録すると、ここに並びます。" : "Kindle などで買った電子書籍を登録すると、ここに並びます。"}
+        </p>
+      ) : (
+        <div className="shelf">
+          {items.slice(0, 8).map((p) => (
+            <PatternCard key={p.id} pattern={p} files={filesByPattern.get(p.id)} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

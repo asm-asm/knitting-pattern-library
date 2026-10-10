@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { BACK_STATE } from "../hooks/navigation";
 import type { Category, Pattern, PatternFile, PatternStatus } from "../db/types";
-import { STATUS_LABELS } from "../db/types";
+import { ITEM_TYPE_LABELS, STATUS_LABELS, itemTypeOf } from "../db/types";
 import { useBlobUrl } from "../hooks/hooks";
 import { useFeedback } from "./Feedback";
 import { toggleFavorite } from "../db/repo";
@@ -15,12 +15,22 @@ function hash(s: string) {
 }
 
 /** 表紙画像。未登録の場合はタイトルから色を決めた毛糸玉のプレースホルダーを表示する。 */
-export function Cover({ pattern, className = "" }: { pattern: Pick<Pattern, "id" | "title" | "coverBlobId">; className?: string }) {
+export function Cover({ pattern, className = "" }: { pattern: Pick<Pattern, "id" | "title" | "coverBlobId" | "itemType">; className?: string }) {
   const url = useBlobUrl(pattern.coverBlobId);
   if (url) return <img className={`cover ${className}`} src={url} alt="" loading="lazy" draggable={false} />;
   const tone = PLACEHOLDER_TONES[hash(pattern.id) % PLACEHOLDER_TONES.length];
   return (
     <div className={`cover cover-placeholder ${className}`} style={{ background: tone }} aria-hidden="true">
+      {pattern.itemType === "book" || pattern.itemType === "ebook" ? (
+        // 本・電子書籍：開いた本のイラスト
+        <svg viewBox="0 0 100 100" width="48%">
+          <g fill="rgba(255,255,255,.4)" stroke="rgba(255,255,255,.85)" strokeWidth="3" strokeLinejoin="round">
+            <path d="M50 28c-10-6-24-7-34-4v50c10-3 24-2 34 4z" />
+            <path d="M50 28c10-6 24-7 34-4v50c-10-3-24-2-34 4z" />
+          </g>
+          {pattern.itemType === "ebook" && <circle cx="50" cy="88" r="4" fill="rgba(255,255,255,.85)" />}
+        </svg>
+      ) : (
       <svg viewBox="0 0 100 100" width="44%">
         <circle cx="50" cy="52" r="32" fill="rgba(255,255,255,.35)" />
         <g fill="none" stroke="rgba(255,255,255,.75)" strokeWidth="3" strokeLinecap="round">
@@ -31,12 +41,19 @@ export function Cover({ pattern, className = "" }: { pattern: Pick<Pattern, "id"
           <path d="M60 22c7 16 7 44 0 60" />
         </g>
       </svg>
+      )}
     </div>
   );
 }
 
 export function StatusBadge({ status }: { status: PatternStatus }) {
   return <span className={`badge status-${status}`}>{STATUS_LABELS[status]}</span>;
+}
+
+/** 作品はステータス、本・電子書籍は種類を表示する */
+export function ItemBadge({ pattern }: { pattern: Pattern }) {
+  const t = itemTypeOf(pattern);
+  return t === "pattern" ? <StatusBadge status={pattern.status} /> : <span className={`badge type-badge type-${t}`}>{ITEM_TYPE_LABELS[t]}</span>;
 }
 
 export function FavoriteButton({ pattern, size = "md" }: { pattern: Pattern; size?: "sm" | "md" }) {
@@ -81,7 +98,7 @@ export function PatternCard({ pattern, files }: { pattern: Pattern; files?: Patt
       <div className="card-body">
         <div className="card-title">{pattern.title}</div>
         <div className="card-meta">
-          <StatusBadge status={pattern.status} />
+          <ItemBadge pattern={pattern} />
           {hasPdf(files) && <PdfIndicator files={files} />}
         </div>
       </div>
@@ -109,7 +126,7 @@ export function PatternRow({
           {pattern.shopName && <span>{pattern.shopName}</span>}
         </div>
         <div className="row-meta">
-          <StatusBadge status={pattern.status} />
+          <ItemBadge pattern={pattern} />
           <PdfIndicator files={files} />
         </div>
       </div>

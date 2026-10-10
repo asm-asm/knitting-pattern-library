@@ -1,8 +1,11 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
-import type { Pattern, PatternStatus } from "../db/types";
-import type { PatternInput } from "../db/repo";
+import { ITEM_TYPE_LABELS, itemTypeOf, type ItemType, type Pattern, type PatternStatus } from "../db/types";
+import { UserFacingError, type PatternInput } from "../db/repo";
+import { lookupBook } from "../lib/bookLookup";
+import { canScanBarcode, scanIsbnBarcode } from "../lib/barcode";
+import { formatIsbn, normalizeIsbn } from "../lib/isbn";
 import { CURRENCIES } from "../lib/format";
 import { CategoryPicker, StatusPicker, TagInput } from "../components/Inputs";
 import { useFeedback } from "../components/Feedback";
@@ -27,10 +30,24 @@ export interface FormValues {
   gauge: string;
   difficulty: string;
   notes: string;
+  itemType: ItemType;
+  author: string;
+  publisher: string;
+  isbn: string;
+  ebookUrl: string;
+  sourceBookId: string;
+  sourcePage: string;
 }
 
-export function emptyValues(): FormValues {
+export function emptyValues(itemType: ItemType = "pattern"): FormValues {
   return {
+    itemType,
+    author: "",
+    publisher: "",
+    isbn: "",
+    ebookUrl: "",
+    sourceBookId: "",
+    sourcePage: "",
     title: "",
     status: "want",
     favorite: false,
@@ -53,6 +70,13 @@ export function emptyValues(): FormValues {
 
 export function valuesFromPattern(p: Pattern): FormValues {
   return {
+    itemType: itemTypeOf(p),
+    author: p.author ?? "",
+    publisher: p.publisher ?? "",
+    isbn: p.isbn ? formatIsbn(p.isbn) : "",
+    ebookUrl: p.ebookUrl ?? "",
+    sourceBookId: p.sourceBookId ?? "",
+    sourcePage: p.sourcePage ?? "",
     title: p.title,
     status: p.status,
     favorite: p.favorite,
@@ -95,6 +119,13 @@ export function valuesToInput(v: FormValues): PatternInput {
     gauge: opt(v.gauge),
     difficulty: opt(v.difficulty),
     notes: opt(v.notes),
+    itemType: v.itemType === "pattern" ? undefined : v.itemType,
+    author: opt(v.author),
+    publisher: opt(v.publisher),
+    isbn: opt(v.isbn),
+    ebookUrl: v.itemType === "ebook" ? opt(v.ebookUrl) : undefined,
+    sourceBookId: v.itemType === "pattern" ? opt(v.sourceBookId) : undefined,
+    sourcePage: v.itemType === "pattern" && v.sourceBookId ? opt(v.sourcePage) : undefined,
   };
 }
 
@@ -136,6 +167,7 @@ export function PatternFields({
   onUrlInfo,
   autoFetch = false,
   replaceableTitle,
+  onCoverUrl,
 }: {
   values: FormValues;
   onChange: (v: FormValues) => void;
@@ -147,6 +179,8 @@ export function PatternFields({
   autoFetch?: boolean;
   /** このタイトル（ファイル名から自動で入れたもの）なら URL の情報で置き換えてよい */
   replaceableTitle?: string;
+  /** 本の情報から表紙画像の URL が見つかったとき */
+  onCoverUrl?: (url: string) => void;
 }) {
   const categories = useLiveQuery(() => db.categories.orderBy("order").toArray(), []) ?? [];
   const { toast, showError } = useFeedback();
@@ -217,20 +251,123 @@ export function PatternFields({
     if (autoFetch && canFetch && /^(https?:\/\/)?[^\s/]+\.[^\s]+/.test(url) && fetchedUrl.current !== url) void loadFromUrl(true);
   };
   const suggestion = values.purchaseUrl && !values.title ? titleFromUrl(values.purchaseUrl) : undefined;
+  const isBook = values.itemType !== "pattern";
+  const books = useLiveQuery(() => db.patterns.filter((p) => p.itemType === "book" || p.itemType === "ebook").sortBy("title"), []) ?? [];
+
+  // ---- 本：ISBN から書誌情報を読み込む ----
+  const [looking, setLooking] = useState(false);
+  const lookupIsbn = async (raw: string) => {
+    const isbn = normalizeIsbn(raw);
+    if (!isbn) {
+      showError(new UserFacingError("ISBN の番号が正しくありません。本の裏にある「978」または「979」から始まる13桁の番号を確認してください。"));
+      return;
+    }
+    setLooking(true);
+    try {
+      const info = await lookupBook(isbn);
+      const v = { ...latest.current, isbn: formatIsbn(isbn) };
+      if (!info) {
+        update(v);
+        toast("この ISBN の本の情報が見つかりませんでした。書名などを手入力してください。", "error");
+        return;
+      }
+      const filled: string[] = [];
+      if (info.title && (!v.title.trim() || v.title === replaceableTitle)) {
+        v.title = info.title;
+        filled.push("書名");
+      }
+      if (info.author && !v.author.trim()) {
+        v.author = info.author;
+        filled.push("著者");
+      }
+      if (info.publisher && !v.publisher.trim()) {
+        v.publisher = info.publisher;
+        filled.push("出版社");
+      }
+      update(v);
+      if (info.coverUrl) onCoverUrl?.(info.coverUrl);
+      toast(filled.length ? `本の情報を読み込みました：${filled.join("・")}${info.coverUrl ? "・表紙" : ""}` : "入力済みのため、新しく入れる項目はありませんでした");
+    } catch (e) {
+      showError(e, "本の情報を読み込めませんでした。手入力してください。");
+    } finally {
+      setLooking(false);
+    }
+  };
+  const scan = async () => {
+    try {
+      const code = await scanIsbnBarcode();
+      if (code) {
+        set("isbn", code);
+        await lookupIsbn(code);
+      }
+    } catch (e) {
+      showError(e);
+    }
+  };
 
   return (
     <>
       <section className="form-section">
-        <Field label="作品タイトル（必須）" htmlFor="f-title">
+        {isBook && (
+          <Field
+            label="ISBN（本の裏の13桁の番号）"
+            htmlFor="f-isbn"
+            hint={
+              canScanBarcode()
+                ? "バーコードを読み取るか番号を入力すると、書名・著者・表紙を読み込みます。"
+                : "番号を入力して「読み込む」を押すと、書名・著者を読み込みます。"
+            }
+          >
+            <div className="price-row">
+              <input id="f-isbn" className="input" inputMode="numeric" placeholder="978-" value={values.isbn} onChange={(e) => set("isbn", e.target.value)} />
+              <button type="button" className="btn" disabled={looking || !values.isbn.trim()} onClick={() => lookupIsbn(values.isbn)}>
+                {looking ? "読み込み中…" : "読み込む"}
+              </button>
+            </div>
+            {canScanBarcode() && (
+              <button type="button" className="btn btn-accent btn-block suggest" disabled={looking} onClick={scan}>
+                バーコードを読み取る
+              </button>
+            )}
+          </Field>
+        )}
+        <Field label={isBook ? "書名（必須）" : "作品タイトル（必須）"} htmlFor="f-title">
           <input id="f-title" className="input" value={values.title} onChange={(e) => set("title", e.target.value)} required />
         </Field>
+        {isBook && (
+          <div className="grid-2">
+            <Field label="著者" htmlFor="f-author">
+              <input id="f-author" className="input" value={values.author} onChange={(e) => set("author", e.target.value)} />
+            </Field>
+            <Field label="出版社" htmlFor="f-publisher">
+              <input id="f-publisher" className="input" value={values.publisher} onChange={(e) => set("publisher", e.target.value)} />
+            </Field>
+          </div>
+        )}
+        {values.itemType === "ebook" && (
+          <Field label="電子書籍を開くリンク" htmlFor="f-ebook" hint="Kindle・楽天Kobo などのストアや本棚のページのURL。作品の画面からワンタップで開けます。">
+            <input
+              id="f-ebook"
+              className="input"
+              type="url"
+              inputMode="url"
+              autoCapitalize="off"
+              autoCorrect="off"
+              placeholder="https://"
+              value={values.ebookUrl}
+              onChange={(e) => set("ebookUrl", e.target.value)}
+            />
+          </Field>
+        )}
         <Field
           label="購入先URL"
           htmlFor="f-url"
           hint={
-            canFetch
-              ? "URLを入力すると、タイトル・画像・購入情報などを読み込みます（入力済みの項目は上書きしません）。"
-              : "ブラウザ版ではURLから情報を読み込めません。必要な情報は手入力してください。"
+            isBook
+              ? undefined
+              : canFetch
+                ? "URLを入力すると、タイトル・画像・購入情報などを読み込みます（入力済みの項目は上書きしません）。"
+                : "ブラウザ版ではURLから情報を読み込めません。必要な情報は手入力してください。"
           }
         >
           <input
@@ -243,30 +380,51 @@ export function PatternFields({
             placeholder="https://"
             value={values.purchaseUrl}
             onChange={(e) => set("purchaseUrl", e.target.value)}
-            onPaste={() => setTimeout(maybeAutoFetch, 0)}
+            onPaste={() => {
+              if (!isBook) setTimeout(maybeAutoFetch, 0);
+            }}
             onBlur={() => {
-              if (!canFetch && values.purchaseUrl && !values.shopName) {
+              if ((isBook || !canFetch) && values.purchaseUrl && !values.shopName) {
                 const shop = shopFromUrl(values.purchaseUrl);
                 if (shop) set("shopName", shop);
               }
-              maybeAutoFetch();
+              if (!isBook) maybeAutoFetch();
             }}
           />
-          {canFetch && values.purchaseUrl.trim() && (
+          {!isBook && canFetch && values.purchaseUrl.trim() && (
             <button type="button" className="btn btn-small btn-accent suggest" disabled={fetching} onClick={() => loadFromUrl()}>
               {fetching ? "読み込み中…" : "URLから情報を読み込む"}
             </button>
           )}
-          {suggestion && !canFetch && (
+          {suggestion && !canFetch && !isBook && (
             <button type="button" className="btn btn-small suggest" onClick={() => set("title", suggestion)}>
               タイトルに「{suggestion}」を使う
             </button>
           )}
         </Field>
         {extraBasic}
-        <Field label="制作ステータス">
-          <StatusPicker value={values.status} onChange={(s) => set("status", s)} />
-        </Field>
+        {!isBook && (
+          <Field label="制作ステータス">
+            <StatusPicker value={values.status} onChange={(s) => set("status", s)} />
+          </Field>
+        )}
+        {!isBook && books.length > 0 && (
+          <Field label="掲載している本（任意）" htmlFor="f-book" hint="本に載っている作品なら、本を選ぶと作品と本を結び付けられます。">
+            <div className="price-row">
+              <select id="f-book" className="select grow" value={values.sourceBookId} onChange={(e) => set("sourceBookId", e.target.value)}>
+                <option value="">選ばない</option>
+                {books.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {ITEM_TYPE_LABELS[itemTypeOf(b)]}：{b.title}
+                  </option>
+                ))}
+              </select>
+              {values.sourceBookId && (
+                <input className="input page-input" placeholder="ページ" aria-label="掲載ページ" value={values.sourcePage} onChange={(e) => set("sourcePage", e.target.value)} />
+              )}
+            </div>
+          </Field>
+        )}
         <label className="check">
           <input type="checkbox" checked={values.favorite} onChange={(e) => set("favorite", e.target.checked)} />
           お気に入りに追加
@@ -280,11 +438,13 @@ export function PatternFields({
       </section>
 
       <details className="form-section" open={openDetails} onToggle={(e) => setOpenDetails(e.currentTarget.open)}>
-        <summary>購入情報・編み物の詳細</summary>
+        <summary>{isBook ? "購入情報" : "購入情報・編み物の詳細"}</summary>
         <div className="grid-2">
-          <Field label="デザイナー" htmlFor="f-designer">
-            <input id="f-designer" className="input" value={values.designer} onChange={(e) => set("designer", e.target.value)} />
-          </Field>
+          {!isBook && (
+            <Field label="デザイナー" htmlFor="f-designer">
+              <input id="f-designer" className="input" value={values.designer} onChange={(e) => set("designer", e.target.value)} />
+            </Field>
+          )}
           <Field label="ショップ名" htmlFor="f-shop">
             <input id="f-shop" className="input" value={values.shopName} onChange={(e) => set("shopName", e.target.value)} />
           </Field>
@@ -307,6 +467,8 @@ export function PatternFields({
               </select>
             </div>
           </Field>
+          {!isBook && (
+            <>
           <Field label="使用糸" htmlFor="f-yarn">
             <input id="f-yarn" className="input" value={values.yarn} onChange={(e) => set("yarn", e.target.value)} />
           </Field>
@@ -322,6 +484,8 @@ export function PatternFields({
           <Field label="難易度" htmlFor="f-diff">
             <input id="f-diff" className="input" placeholder="例：中級" value={values.difficulty} onChange={(e) => set("difficulty", e.target.value)} />
           </Field>
+            </>
+          )}
         </div>
       </details>
 

@@ -3,14 +3,14 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import { useFeedback } from "./Feedback";
 import { usePremium } from "./Paywall";
-import { FREE_PATTERN_LIMIT, manageSubscriptions, restorePurchases } from "../lib/premium";
+import { countByKind, FREE_BOOK_LIMIT, FREE_PATTERN_LIMIT, manageSubscriptions, restorePurchases } from "../lib/premium";
 import { formatDate } from "../lib/format";
 import { BACK_STATE } from "../hooks/navigation";
 
 /** 設定画面のプレミアム欄（iOS アプリのみ） */
 export function PremiumSettings() {
   const premium = usePremium();
-  const count = useLiveQuery(() => db.patterns.count(), []);
+  const counts = useLiveQuery(async () => countByKind(await db.patterns.toArray()), []);
   const { toast, showError } = useFeedback();
   if (!premium.enforced) return null;
   return (
@@ -19,11 +19,15 @@ export function PremiumSettings() {
       <dl className="info-list">
         <div>
           <dt>ご利用中のプラン</dt>
-          <dd>{premium.active ? "プレミアム（登録数 無制限）" : `無料版（作品${FREE_PATTERN_LIMIT}件まで）`}</dd>
+          <dd>{premium.active ? "プレミアム（登録数 無制限）" : `無料版（作品${FREE_PATTERN_LIMIT}件・本${FREE_BOOK_LIMIT}冊まで）`}</dd>
         </div>
         <div>
           <dt>登録作品</dt>
-          <dd>{premium.active ? `${count ?? "…"}件` : `${count ?? "…"} / ${FREE_PATTERN_LIMIT}件`}</dd>
+          <dd>{premium.active ? `${counts?.patterns ?? "…"}件` : `${counts?.patterns ?? "…"} / ${FREE_PATTERN_LIMIT}件`}</dd>
+        </div>
+        <div>
+          <dt>本・電子書籍</dt>
+          <dd>{premium.active ? `${counts?.books ?? "…"}冊` : `${counts?.books ?? "…"} / ${FREE_BOOK_LIMIT}冊`}</dd>
         </div>
         {premium.active && premium.expiresAt && (
           <div>
