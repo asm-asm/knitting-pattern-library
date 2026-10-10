@@ -431,3 +431,13 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .start-actions .btn-start { margin-top: 0; min-width: 0; }
 .btn-view { border: 1.5px solid var(--primary); color: var(--primary); font-weight: 700; }
 .btn-start .btn-sub { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* プレミアム */
+.paywall { background: var(--surface); border-radius: var(--radius); padding: 22px 18px; box-shadow: var(--shadow); display: grid; gap: 10px; }
+.paywall-badge { justify-self: start; padding: 2px 12px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 800; font-size: 0.85rem; }
+.paywall-title { font-size: 1.3rem; margin: 4px 0 0; line-height: 1.45; }
+.paywall p { margin: 0; }
+.paywall-list { margin: 4px 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.paywall-buy { min-height: 56px; font-size: 1.05rem; border-radius: var(--radius); }
+.paywall-legal { color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
+.paywall-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }

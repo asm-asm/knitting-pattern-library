@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles.css";
 import { isNativeApp } from "./lib/native";
 import { initStorage } from "./storage/init";
+import { initPremium } from "./lib/premium";
 
 const root = createRoot(document.getElementById("root")!);
 const render = (recovered?: { patterns: number; files: number }) =>
@@ -14,6 +15,8 @@ const render = (recovered?: { patterns: number; files: number }) =>
   );
 
 // iOS アプリでは、保存先の準備（必要なら控えからの自動復元）が終わってから画面を出す
+// 購入状態の確認は画面表示を待たせない（オフラインでも作品の閲覧には影響しない）
+void initPremium();
 initStorage()
   .then((r) => render(r.recovered))
   .catch((e) => {

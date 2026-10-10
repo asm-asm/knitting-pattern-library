@@ -11,6 +11,7 @@ import EditPattern from "./pages/EditPattern";
 import PatternDetail from "./pages/PatternDetail";
 import Settings from "./pages/Settings";
 import Import from "./pages/Import";
+import Premium from "./pages/Premium";
 import { startIncomingFileListener } from "./lib/native";
 
 // ビューアは pdf.js を含み大きいので遅延読み込み
@@ -78,6 +79,7 @@ function Shell({ recovered }: { recovered?: { patterns: number; files: number } 
             <Route path="/patterns/:id/files/:fileId" element={<Viewer />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/import" element={<Import />} />
+            <Route path="/premium" element={<Premium />} />
             <Route path="*" element={<EmptyState title="ページが見つかりません" />} />
           </Routes>
         </Suspense>

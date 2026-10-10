@@ -9,6 +9,11 @@ import { Field, PatternFields, emptyValues, valuesToInput } from "./PatternForm"
 import { clearHandoff, peekHandoff } from "./Import";
 import { fetchImage } from "../lib/fetchUrl";
 import { BACK_STATE } from "../hooks/navigation";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "../db/db";
+import { Paywall, usePremium } from "../components/Paywall";
+import { canAddPattern } from "../lib/premium";
+import { UserFacingError } from "../db/repo";
 
 export default function NewPattern() {
   const navigate = useNavigate();
@@ -30,6 +35,9 @@ export default function NewPattern() {
   const autoTitle = files[0] ? stripExtension(files[0].file.name) : undefined;
   const [pdfCover, setPdfCover] = useState(true);
   const [busy, setBusy] = useState(false);
+  const patternCount = useLiveQuery(() => db.patterns.count(), []);
+  const premium = usePremium();
+  const limited = premium.enforced && patternCount !== undefined && !canAddPattern(patternCount, premium.active);
   const coverInput = useRef<HTMLInputElement>(null);
   const hasPdf = files.some((f) => f.file.type === "application/pdf" || f.file.name.toLowerCase().endsWith(".pdf"));
 
@@ -44,6 +52,10 @@ export default function NewPattern() {
     if (busy) return;
     setBusy(true);
     try {
+      // 念のため保存直前にも上限を確認する
+      if (premium.enforced && !canAddPattern(await db.patterns.count(), premium.active)) {
+        throw new UserFacingError("無料版で登録できる作品は5件までです。プレミアムに登録するか、作品を整理してください。");
+      }
       const input = valuesToInput(values);
       const prepared = await prepareFiles(files, { thumbnail: !coverFile && pdfCover });
       let cover: ImageInput | undefined = prepared.thumbnail;
@@ -59,6 +71,22 @@ export default function NewPattern() {
       setBusy(false);
     }
   };
+
+  if (limited) {
+    // 6件目以降：入力内容（共有メニューから受け取ったファイルも含む）は保ったまま、案内を表示する
+    return (
+      <div className="page form">
+        <header className="page-header">
+          <button type="button" className="btn btn-ghost" onClick={() => navigate(-1)}>
+            戻る
+          </button>
+          <h1>作品を登録</h1>
+          <span style={{ width: 56 }} />
+        </header>
+        <Paywall reason="limit" patternCount={patternCount} />
+      </div>
+    );
+  }
 
   return (
     <form className="page form" onSubmit={submit}>

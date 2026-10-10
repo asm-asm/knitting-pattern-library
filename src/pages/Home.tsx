@@ -5,8 +5,11 @@ import { db } from "../db/db";
 import type { Pattern, PatternFile } from "../db/types";
 import { Cover, EmptyState, PatternCard, StatusBadge } from "../components/PatternParts";
 import { BACK_STATE } from "../hooks/navigation";
+import { usePremium } from "../components/Paywall";
+import { FREE_PATTERN_LIMIT } from "../lib/premium";
 
 export default function Home() {
+  const premium = usePremium();
   const patterns = useLiveQuery(() => db.patterns.toArray(), []);
   const files = useLiveQuery(() => db.files.toArray(), []);
 
@@ -17,6 +20,7 @@ export default function Home() {
   }, [files]);
 
   if (!patterns) return <div className="page loading">読み込み中…</div>;
+  const freeLimit = premium.enforced && !premium.active;
 
   const byUpdated = [...patterns].sort((a, b) => b.updatedAt - a.updatedAt);
   const inProgress = patterns
@@ -52,7 +56,7 @@ export default function Home() {
           <div className="stats">
             <div className="stat">
               <span className="stat-num">{patterns.length}</span>
-              <span className="stat-label">登録作品</span>
+              <span className="stat-label">{freeLimit ? `登録作品（無料は${FREE_PATTERN_LIMIT}件まで）` : "登録作品"}</span>
             </div>
             <div className="stat">
               <span className="stat-num">{inProgress.length}</span>

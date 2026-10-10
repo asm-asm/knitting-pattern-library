@@ -8,6 +8,7 @@ import { formatBytes } from "../lib/format";
 import { requestPersistentStorage } from "../lib/importFiles";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
 import { BackupSettings } from "../components/BackupSettings";
+import { PremiumSettings } from "../components/PremiumSettings";
 import { isNativeApp } from "../lib/native";
 import { snapshotLastSavedAt } from "../storage/init";
 import { formatDateTime } from "../lib/format";
@@ -21,6 +22,7 @@ export default function Settings() {
       <header className="page-header">
         <h1>設定</h1>
       </header>
+      <PremiumSettings />
       <LinkSection />
       <CategorySettings />
       <ViewerSettings />

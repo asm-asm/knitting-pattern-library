@@ -1,0 +1,12 @@
+{
+  "name": "knitting-storekit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App Store のサブスクリプション（StoreKit 2）を扱う、このアプリ専用の Capacitor プラグイン。外部サービスを使わず端末内で完結する。",
+  "main": "index.js",
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}
