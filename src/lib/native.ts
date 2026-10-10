@@ -79,7 +79,7 @@ export async function startIncomingFileListener(onReceive: () => void, onError: 
   return () => void handle.remove();
 }
 
-// ---- バックアップファイルの保存（共有シート） ----
+// ---- ファイルの書き出し（共有シート）：バックアップや PDF の共有に使う ----
 
 function toBase64(bytes: Uint8Array): string {
   let bin = "";
@@ -93,7 +93,8 @@ export async function shareFileNative(blob: Blob, filename: string): Promise<"sh
   const [{ Filesystem, Directory }, { Share }] = await Promise.all([import("@capacitor/filesystem"), import("@capacitor/share")]);
   // 大きなバックアップでもメモリを使いすぎないよう、少しずつ書き込む（3の倍数で base64 の区切りを揃える）
   const CHUNK = 3 * 1024 * 1024;
-  const path = `backup/${filename}`;
+  // 共有用の一時ファイル（共有が終わったら削除する）
+  const path = `share/${filename}`;
   for (let offset = 0; offset < blob.size || offset === 0; offset += CHUNK) {
     const data = toBase64(new Uint8Array(await blob.slice(offset, offset + CHUNK).arrayBuffer()));
     if (offset === 0) await Filesystem.writeFile({ path, data, directory: Directory.Cache, recursive: true });

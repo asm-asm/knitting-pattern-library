@@ -391,6 +391,20 @@ await step("戻るボタンが作品詳細とPDFの間でループしない", as
   await atLibrary();
 });
 
+await step("登録したPDFを書き出せる（共有）", async () => {
+  await page.goto(base + "#/library");
+  await page.getByText("ケーブル編みのセーター").click();
+  const dl = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Cable Sweater.pdf をほかのアプリで開く・保存する" }).click();
+  const d = await dl;
+  if (d.suggestedFilename() !== "Cable Sweater.pdf") throw new Error("ファイル名が違う: " + d.suggestedFilename());
+  const p = join(outDir, "exported.pdf");
+  await d.saveAs(p);
+  const { readFileSync } = await import("node:fs");
+  if (!readFileSync(p, "latin1").startsWith("%PDF")) throw new Error("PDFではない");
+  await shot("14-share-button");
+});
+
 await step("作品の削除（確認あり）", async () => {
   await page.goto(base + "#/library");
   await page.getByText("mohair beret").click();

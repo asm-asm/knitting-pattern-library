@@ -442,3 +442,5 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .paywall-legal { color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
 .paywall-links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .paywall { max-width: 640px; margin: 0 auto; }
+.share-btn { min-height: 36px; padding: 2px 12px; margin-right: 2px; border-radius: 999px; border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--primary); font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+.file-row { grid-template-columns: 1fr auto auto; }

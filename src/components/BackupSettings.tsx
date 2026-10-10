@@ -3,37 +3,7 @@ import { useFeedback } from "./Feedback";
 import { backupFileName, createBackup, parseBackup, restoreBackup, wipeAllData, type ParsedBackup, type RestoreMode } from "../lib/backup";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { usePersistentState } from "../hooks/hooks";
-import { isNativeApp, shareFileNative } from "../lib/native";
-
-/**
- * 作成したファイルを端末に保存する。
- * iOS などでは共有シート（「"ファイル"に保存」など）、それ以外はダウンロード。
- * 共有シートはタップ直後でないと開けないため、作成とは別のボタン操作から呼ぶ。
- */
-async function saveFile(blob: Blob, filename: string): Promise<"shared" | "downloaded" | "cancelled"> {
-  // iOS アプリ：WebView ではダウンロードできないため、ネイティブの共有シートを使う
-  if (isNativeApp()) return shareFileNative(blob, filename);
-  const file = new File([blob], filename, { type: blob.type });
-  const touch = navigator.maxTouchPoints > 0;
-  if (touch && navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file] });
-      return "shared";
-    } catch (e) {
-      if ((e as Error)?.name === "AbortError") return "cancelled";
-      // 共有できない場合はダウンロードにフォールバック
-    }
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  return "downloaded";
-}
+import { saveOrShareFile } from "../lib/saveFile";
 
 export function BackupSettings() {
   const { confirm, toast, showError } = useFeedback();
@@ -114,9 +84,9 @@ export function BackupSettings() {
               type="button"
               className="btn btn-primary"
               onClick={async () => {
-                let r: Awaited<ReturnType<typeof saveFile>>;
+                let r: Awaited<ReturnType<typeof saveOrShareFile>>;
                 try {
-                  r = await saveFile(ready.blob, ready.filename);
+                  r = await saveOrShareFile(ready.blob, ready.filename);
                 } catch (e) {
                   showError(e, "ファイルを保存できませんでした。端末の空き容量を確認して、もう一度お試しください。");
                   return;

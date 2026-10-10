@@ -13,6 +13,7 @@ import {
   setPatternCover,
   setStatus,
   updateFile,
+  UserFacingError,
 } from "../db/repo";
 import { FILE_KIND_LABELS, FILE_KIND_ORDER, type FileKind, type Pattern, type PatternFile } from "../db/types";
 import { Cover, EmptyState, FavoriteButton } from "../components/PatternParts";
@@ -23,6 +24,7 @@ import { formatBytes, formatDate, formatPrice } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
 import { inspectPdf } from "../lib/pdf";
 import { canFetchUrlInfo, fetchImage, fetchPageInfo } from "../lib/fetchUrl";
+import { saveOrShareFile } from "../lib/saveFile";
 import { BACK_STATE, useGoBack } from "../hooks/navigation";
 
 /** 「続きから編む」で開くファイル：最後に開いたもの → 日本語版 → 先頭 */
@@ -394,11 +396,50 @@ function FileRow({ file }: { file: PatternFile }) {
           </small>
         </span>
       </Link>
+      <ShareFileButton file={file} />
       <button type="button" className="icon-btn" aria-label={`${file.name} の名前・種別を変更`} onClick={() => setEditing(true)}>
         ⋯
       </button>
     </li>
   );
+}
+
+/** 登録したファイルを、共有シートから「ファイル」に保存したり、ほかのアプリで開いたりする */
+function ShareFileButton({ file }: { file: PatternFile }) {
+  const { showError, toast } = useFeedback();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="share-btn"
+      disabled={busy}
+      aria-label={`${file.name} をほかのアプリで開く・保存する`}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const blob = await getBlob(file.blobId);
+          if (!blob) throw new UserFacingError("ファイルの本体が見つかりません。バックアップから復元するか、ファイルを登録し直してください。");
+          const r = await saveOrShareFile(blob, exportFileName(file));
+          if (r === "downloaded") toast("ファイルをダウンロードしました");
+        } catch (e) {
+          showError(e, "ファイルを共有できませんでした。もう一度お試しください。");
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      共有
+    </button>
+  );
+}
+
+/** 書き出すときのファイル名（使えない文字を除き、拡張子を補う） */
+export function exportFileName(file: Pick<PatternFile, "name" | "mimeType">): string {
+  const ext = file.mimeType === "application/pdf" ? ".pdf" : file.mimeType === "image/png" ? ".png" : file.mimeType === "image/jpeg" ? ".jpg" : "";
+  // eslint-disable-next-line no-control-regex
+  let name = file.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "file";
+  if (ext && !name.toLowerCase().endsWith(ext) && !(ext === ".jpg" && /\.jpe?g$/i.test(name))) name += ext;
+  return name;
 }
 
 function PurchaseInfo({ pattern }: { pattern: Pattern }) {
