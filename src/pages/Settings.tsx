@@ -6,6 +6,7 @@ import type { Category } from "../db/types";
 import { useFeedback } from "../components/Feedback";
 import { formatBytes } from "../lib/format";
 import { requestPersistentStorage } from "../lib/importFiles";
+import { KEEP_AWAKE_KEY } from "../lib/settings";
 
 export default function Settings() {
   return (
@@ -14,6 +15,7 @@ export default function Settings() {
         <h1>設定</h1>
       </header>
       <CategorySettings />
+      <ViewerSettings />
       <StorageSettings />
       <PrivacyInfo />
     </div>
@@ -117,6 +119,37 @@ function CategoryRow({ category, first, last }: { category: Category; first: boo
         </button>
       </div>
     </li>
+  );
+}
+
+function ViewerSettings() {
+  const [keepAwake, setKeepAwake] = useState(() => {
+    try {
+      return localStorage.getItem(KEEP_AWAKE_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  return (
+    <section className="section">
+      <h2 className="section-title">編み図の閲覧</h2>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={keepAwake}
+          onChange={(e) => {
+            setKeepAwake(e.target.checked);
+            try {
+              localStorage.setItem(KEEP_AWAKE_KEY, e.target.checked ? "1" : "0");
+            } catch {
+              /* 保存できない環境では今回のみ反映 */
+            }
+          }}
+        />
+        編み図を表示している間は画面を消灯しない
+      </label>
+      <p className="hint">対応していない端末・ブラウザでは、この設定は効きません。</p>
+    </section>
   );
 }
 

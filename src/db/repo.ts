@@ -1,6 +1,6 @@
 // データ操作の窓口。UI はここを通して保存・削除を行う。
 import { db as defaultDb, type LibraryDB } from "./db";
-import type { Category, FileKind, Pattern, PatternFile, PatternStatus, ViewState } from "./types";
+import type { Annotation, Category, FileKind, Pattern, PatternFile, PatternStatus, ViewState } from "./types";
 import { newId } from "../lib/id";
 
 /** 利用者にそのまま表示してよい日本語メッセージを持つエラー */
@@ -318,4 +318,108 @@ export async function ensureDefaultCategories(db: LibraryDB = defaultDb) {
   }
   const now = Date.now();
   await db.categories.bulkAdd(DEFAULT_CATEGORIES.map((name, order) => ({ id: newId(), name, order, createdAt: now })));
+}
+
+// ---- 作品メモ ----
+
+export async function updatePatternNotes(id: string, notes: string, db: LibraryDB = defaultDb) {
+  await db.patterns.update(id, { notes: notes.trim() ? notes : undefined, updatedAt: Date.now() });
+}
+
+// ---- 段数カウンター（作品単位） ----
+
+function cleanTarget(target: number | undefined) {
+  if (target === undefined) return undefined;
+  if (!Number.isInteger(target) || target <= 0) throw new UserFacingError("目標段数は1以上の整数で入力してください。");
+  return target;
+}
+
+export async function createCounter(patternId: string, name: string, target?: number, db: LibraryDB = defaultDb) {
+  const n = name.trim() || "カウンター";
+  const t = cleanTarget(target);
+  const id = newId();
+  await db.transaction("rw", db.counters, async () => {
+    const list = await db.counters.where("patternId").equals(patternId).toArray();
+    const now = Date.now();
+    await db.counters.add({
+      id,
+      patternId,
+      name: n,
+      value: 0,
+      target: t,
+      order: list.reduce((m, c) => Math.max(m, c.order), -1) + 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+  return id;
+}
+
+/** 加算・減算。連打されても取りこぼさないよう DB 上で原子的に更新する。0 未満にはしない。 */
+export async function stepCounter(id: string, delta: number, db: LibraryDB = defaultDb) {
+  await db.counters
+    .where("id")
+    .equals(id)
+    .modify((c) => {
+      c.value = Math.max(0, c.value + delta);
+      c.updatedAt = Date.now();
+    });
+}
+
+export async function resetCounter(id: string, db: LibraryDB = defaultDb) {
+  await db.counters.update(id, { value: 0, updatedAt: Date.now() });
+}
+
+export async function updateCounter(
+  id: string,
+  patch: { name?: string; target?: number | null; value?: number },
+  db: LibraryDB = defaultDb,
+) {
+  const changes: Partial<{ name: string; target: number | undefined; value: number; updatedAt: number }> = {
+    updatedAt: Date.now(),
+  };
+  if (patch.name !== undefined) {
+    const n = patch.name.trim();
+    if (!n) throw new UserFacingError("カウンター名を入力してください。");
+    changes.name = n;
+  }
+  if (patch.target !== undefined) changes.target = patch.target === null ? undefined : cleanTarget(patch.target);
+  if (patch.value !== undefined) {
+    if (!Number.isInteger(patch.value) || patch.value < 0) throw new UserFacingError("段数は0以上の整数で入力してください。");
+    changes.value = patch.value;
+  }
+  await db.counters.update(id, changes);
+}
+
+export async function deleteCounter(id: string, db: LibraryDB = defaultDb) {
+  await db.counters.delete(id);
+}
+
+// ---- 注釈（ファイル単位・ページ単位） ----
+
+type NewAnnotation = DistributiveOmit<Annotation, "id" | "createdAt" | "updatedAt">;
+type DistributiveOmit<T, K extends keyof T> = T extends unknown ? Omit<T, K> : never;
+
+export async function addAnnotation(a: NewAnnotation, db: LibraryDB = defaultDb): Promise<string> {
+  const now = Date.now();
+  const id = newId();
+  await db.annotations.add({ ...a, id, createdAt: now, updatedAt: now } as Annotation);
+  return id;
+}
+
+export async function updateNoteText(id: string, text: string, db: LibraryDB = defaultDb) {
+  await db.annotations.update(id, { text, updatedAt: Date.now() } as Partial<Annotation>);
+}
+
+export async function deleteAnnotation(id: string, db: LibraryDB = defaultDb) {
+  await db.annotations.delete(id);
+}
+
+export async function deletePageAnnotations(fileId: string, page: number, db: LibraryDB = defaultDb) {
+  await db.annotations.where("[fileId+page]").equals([fileId, page]).delete();
+}
+
+/** 「元に戻す」で削除した注釈を復元する */
+export async function restoreAnnotation(a: Annotation, db: LibraryDB = defaultDb) {
+  await db.annotations.put(a);
 }

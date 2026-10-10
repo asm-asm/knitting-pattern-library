@@ -18,6 +18,7 @@ import { FILE_KIND_LABELS, FILE_KIND_ORDER, type FileKind, type Pattern, type Pa
 import { Cover, EmptyState, FavoriteButton } from "../components/PatternParts";
 import { ExternalLinkButton, FileKindSelect, FileSelection, StatusPicker, type PendingFile } from "../components/Inputs";
 import { useFeedback } from "../components/Feedback";
+import { CounterList, NotesEditor } from "../components/Counters";
 import { formatBytes, formatDate, formatPrice } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
 import { inspectPdf } from "../lib/pdf";
@@ -101,8 +102,13 @@ export default function PatternDetail() {
       <PurchaseInfo pattern={pattern} />
 
       <section className="section">
-        <h3 className="section-title">メモ</h3>
-        {pattern.notes ? <p className="notes">{pattern.notes}</p> : <p className="muted">メモはまだありません。「編集」から追加できます。</p>}
+        <h3 className="section-title">段数カウンター</h3>
+        <CounterList patternId={pattern.id} />
+      </section>
+
+      <section className="section">
+        <h3 className="section-title">制作メモ</h3>
+        <NotesEditor key={pattern.id} patternId={pattern.id} initial={pattern.notes} />
       </section>
 
       <DangerZone pattern={pattern} />

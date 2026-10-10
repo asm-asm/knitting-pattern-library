@@ -30,12 +30,15 @@ page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 
 const steps = [];
+let at = "";
+const mark = (m) => (at = m);
 async function step(name, fn) {
+  at = "";
   try {
     await fn();
     steps.push(["OK", name]);
   } catch (e) {
-    steps.push(["NG", name, String(e).split("\n")[0]]);
+    steps.push(["NG", name, `[${at}] ` + String(e).split("\n")[0]]);
     await page.screenshot({ path: join(outDir, `fail-${steps.length}.png`) });
   }
 }
@@ -115,17 +118,155 @@ await step("ホームに制作中の作品が表示される", async () => {
   await shot("06-home");
 });
 
+const canvasReady = (n) =>
+  page.waitForFunction((n) => (document.querySelector(`.page-box[data-page="${n}"] canvas`)?.width ?? 0) > 0, n);
+const pageSelect = () => page.getByLabel("ページ移動");
+const fileSelect = () => page.getByLabel("表示するファイル");
+
+await step("PDFビューア：原本と日本語版を別々に開き、閲覧位置をファイルごとに保持", async () => {
+  await page.locator(".wip-card").first().click();
+  await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
+  await canvasReady(1);
+  await pageSelect().selectOption("3"); // 4ページ目
+  await canvasReady(4);
+  await page.getByRole("button", { name: "拡大" }).click();
+  await page.getByRole("button", { name: "幅に合わせる" }).filter({ hasText: "125%" }).waitFor();
+  await page.waitForTimeout(900); // 閲覧位置の保存を待つ
+  await shot("08-viewer-en");
+
+  await fileSelect().selectOption({ label: "日本語翻訳版：ケーブルセーター_日本語.pdf" });
+  await canvasReady(1);
+  if ((await pageSelect().inputValue()) !== "0") throw new Error("日本語版が1ページ目から開かれていない");
+  await pageSelect().selectOption("5");
+  await page.waitForTimeout(900);
+
+  await fileSelect().selectOption({ label: "英語原本：Cable Sweater.pdf" });
+  await canvasReady(4);
+  if ((await pageSelect().inputValue()) !== "3") throw new Error("英語原本の閲覧ページが復元されない");
+  await page.getByRole("button", { name: "幅に合わせる" }).filter({ hasText: "125%" }).waitFor();
+  await page.reload();
+  await canvasReady(4);
+  if ((await pageSelect().inputValue()) !== "3") throw new Error("再読み込み後に閲覧ページが復元されない");
+  await fileSelect().selectOption({ label: "日本語翻訳版：ケーブルセーター_日本語.pdf" });
+  await canvasReady(6);
+  if ((await pageSelect().inputValue()) !== "5") throw new Error("日本語版の閲覧ページが復元されない");
+});
+
+await step("段数カウンター：複数作成・加減算・再読み込み後も保持・リセット確認", async () => {
+  await page.getByRole("button", { name: "段数" }).click();
+  for (const [name, target] of [["身頃", "100"], ["左袖", ""]]) {
+    await page.getByRole("button", { name: "＋ カウンターを追加" }).click();
+    await page.getByLabel("カウンター名").fill(name);
+    await page.getByLabel("目標段数").fill(target);
+    await page.getByRole("button", { name: "追加", exact: true }).click();
+    await page.getByText(name, { exact: true }).waitFor();
+  }
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "身頃 を1段進める" }).click();
+  await page.getByRole("button", { name: "身頃 を1段戻す" }).click();
+  await page.getByRole("button", { name: "左袖 を1段進める" }).click();
+  await shot("09-viewer-counters");
+  await page.reload();
+  await page.getByRole("button", { name: "段数" }).click();
+  const values = await page.locator(".counter-num").allTextContents();
+  if (values.join(",") !== "2,1") throw new Error("カウンター値が保持されていない: " + values);
+  await page.getByRole("button", { name: "作品詳細に戻る" }).click();
+  await page.locator(".counter-card", { hasText: "身頃" }).getByRole("button", { name: "リセット" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "キャンセル" }).click();
+  if ((await page.locator(".counter-num").first().textContent()) !== "2") throw new Error("キャンセルしたのにリセットされた");
+  await page.locator(".counter-card", { hasText: "身頃" }).getByRole("button", { name: "リセット" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "リセット" }).click();
+  await page.locator(".counter-num").first().filter({ hasText: /^0$/ }).waitFor();
+});
+
+await step("書き込み：マーカー・メモが再読み込み後も同じ位置に表示、元に戻す・消しゴム", async () => {
+  await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
+  await pageSelect().selectOption("0");
+  await canvasReady(1);
+  await page.getByRole("button", { name: "書込" }).click();
+  const layer = page.locator('.page-box[data-page="1"] .annot-layer');
+  const box = await layer.boundingBox();
+  const drag = async (y) => {
+    await page.mouse.move(box.x + box.width * 0.2, box.y + y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.5, box.y + y, { steps: 8 });
+    await page.mouse.move(box.x + box.width * 0.8, box.y + y, { steps: 8 });
+    await page.mouse.up();
+  };
+  await drag(box.height * 0.3);
+  const paths = layer.locator("svg path");
+  await paths.nth(0).waitFor({ state: "attached" });
+  const rel = async () => {
+    const [p, b] = [await paths.first().boundingBox(), await layer.boundingBox()];
+    return [(p.x - b.x) / b.width, (p.y - b.y) / b.height].map((v) => v.toFixed(2)).join(",");
+  };
+  const before = await rel();
+
+  // メモ
+  mark("note");
+  await page.locator(".annot-toolbar").getByRole("button", { name: "メモ" }).click();
+  await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5);
+  await page.getByLabel("メモの内容").fill("ここで減目");
+  await page.getByRole("dialog").getByRole("button", { name: "保存" }).click();
+  await layer.locator(".note-pin").waitFor();
+
+  // 元に戻す
+  mark("undo");
+  await page.locator(".annot-toolbar").getByRole("button", { name: "マーカー" }).click();
+  await drag(box.height * 0.6);
+  await paths.nth(1).waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "元に戻す" }).click();
+  await page.waitForFunction(() => document.querySelectorAll('.page-box[data-page="1"] svg path').length === 1);
+  await shot("10-viewer-annotations");
+
+  // 倍率を変えても位置がずれない
+  mark("zoom");
+  await page.getByRole("button", { name: "拡大" }).click();
+  await page.getByRole("button", { name: "拡大" }).click();
+  await page.waitForTimeout(300);
+  if ((await rel()) !== before) throw new Error(`拡大後に位置がずれた ${before} → ${await rel()}`);
+  await page.getByRole("button", { name: "幅に合わせる" }).click();
+
+  mark("reload");
+  await page.reload();
+  await canvasReady(1);
+  await layer.locator(".note-pin").waitFor();
+  if ((await paths.count()) !== 1) throw new Error("再読み込み後にマーカーが残っていない");
+  if ((await rel()) !== before) throw new Error("再読み込み後に位置がずれた");
+
+  // 消しゴム → 元に戻す
+  mark("eraser");
+  await page.getByRole("button", { name: "書込" }).click();
+  await page.locator(".annot-toolbar").getByRole("button", { name: "消しゴム" }).click();
+  const b2 = await layer.boundingBox();
+  await page.mouse.click(b2.x + b2.width * 0.5, b2.y + b2.height * 0.3);
+  await page.waitForFunction(() => document.querySelectorAll('.page-box[data-page="1"] svg path').length === 0);
+  await page.getByRole("button", { name: "元に戻す" }).click();
+  await paths.first().waitFor({ state: "attached" });
+
+  // 一覧
+  mark("list");
+  await page.getByRole("button", { name: "一覧" }).click();
+  await page.locator(".annot-list").getByText("ここで減目").waitFor();
+  await shot("11-viewer-annot-list");
+  await page.getByRole("button", { name: "作品詳細に戻る" }).click();
+});
+
 await step("オフラインでも起動・閲覧・編集できる", async () => {
+  await page.goto(base);
   // Service Worker の準備完了を待ってからオフラインにする
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   await page.reload();
   await context.setOffline(true);
   await page.reload();
   await page.getByText("オフラインです").waitFor();
+  mark("offline-click");
   await page.locator(".wip-card").first().click();
   await page.getByRole("radio", { name: "一時中断" }).click();
   await page.getByRole("radio", { name: "一時中断", checked: true }).waitFor();
-  await shot("07-offline-detail");
+  // オフラインでも PDF を開ける
+  await page.getByRole("link", { name: /ケーブルセーター_日本語.pdf/ }).click();
+  await canvasReady(6);
+  await shot("07-offline-viewer");
   await context.setOffline(false);
 });
 

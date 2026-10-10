@@ -110,10 +110,26 @@ export interface Counter {
  * PDF 上の注釈（ファイル単位・ページ単位）。
  * 座標はページサイズに対する 0〜1 の割合で保存し、倍率や画面サイズが変わってもずれないようにする。
  */
-export type Annotation =
-  | AnnotationBase & { type: "highlight"; x: number; y: number; w: number; h: number; color: string }
-  | AnnotationBase & { type: "ink"; points: number[]; color: string; width: number }
-  | AnnotationBase & { type: "note"; x: number; y: number; text: string };
+export type Annotation = InkAnnotation | NoteAnnotation;
+
+/** 手書き線。マーカー（太く半透明）とペン（細く不透明）は太さと不透明度の違いで表現する。 */
+export interface InkAnnotation extends AnnotationBase {
+  type: "ink";
+  /** [x0, y0, x1, y1, ...]（ページ幅・高さに対する 0〜1 の割合） */
+  points: number[];
+  color: string;
+  /** 線の太さ（ページ幅に対する割合） */
+  width: number;
+  opacity: number;
+}
+
+/** ページ上の位置に付けるテキストメモ */
+export interface NoteAnnotation extends AnnotationBase {
+  type: "note";
+  x: number;
+  y: number;
+  text: string;
+}
 
 interface AnnotationBase {
   id: string;
