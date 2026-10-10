@@ -6,7 +6,7 @@ import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNativeApp } from "./native";
 
 export const FREE_PATTERN_LIMIT = 5;
-export const PREMIUM_PRODUCT_ID = "com.sammy.knittinglibrary.premium.monthly";
+export const PREMIUM_PRODUCT_ID = "com.sammy.knittinglibrary.premiumplan.monthly";
 export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 export const PRIVACY_URL = "https://asm-asm.github.io/knitting-library-support/privacy.html";
 
