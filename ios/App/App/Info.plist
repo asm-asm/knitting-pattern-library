@@ -61,6 +61,8 @@
 	<!-- 独自の暗号化を使用していない（輸出コンプライアンス） -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>本の裏のバーコード（ISBN）を読み取って、書名などを自動で入力するために使います。映像は保存・送信しません。</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
