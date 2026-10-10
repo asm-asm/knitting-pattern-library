@@ -8,6 +8,7 @@ import { stripExtension } from "../lib/format";
 import { Field, PatternFields, emptyValues, valuesToInput } from "./PatternForm";
 import { clearHandoff, peekHandoff } from "./Import";
 import { fetchImage } from "../lib/fetchUrl";
+import { BACK_STATE } from "../hooks/navigation";
 
 export default function NewPattern() {
   const navigate = useNavigate();
@@ -51,7 +52,7 @@ export default function NewPattern() {
       void requestPersistentStorage();
       prepared.warnings.forEach((w) => toast(w, "error"));
       toast("作品を登録しました");
-      navigate(`/patterns/${id}`, { replace: true });
+      navigate(`/patterns/${id}`, { replace: true, state: BACK_STATE });
     } catch (err) {
       showError(err, "登録できませんでした。入力内容を確認して、もう一度お試しください。");
     } finally {

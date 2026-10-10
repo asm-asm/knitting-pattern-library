@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import { setPatternCover, updatePattern } from "../db/repo";
@@ -8,10 +8,11 @@ import { readImage } from "../lib/importFiles";
 import { useFeedback } from "../components/Feedback";
 import { EmptyState } from "../components/PatternParts";
 import { PatternFields, valuesFromPattern, valuesToInput, type FormValues } from "./PatternForm";
+import { useGoBack } from "../hooks/navigation";
 
 export default function EditPattern() {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
+  const goBack = useGoBack(`/patterns/${id}`);
   const { toast, showError } = useFeedback();
   const pattern = useLiveQuery(() => db.patterns.get(id).then((p) => p ?? null), [id]);
   const [values, setValues] = useState<FormValues>();
@@ -31,7 +32,7 @@ export default function EditPattern() {
     try {
       await updatePattern(id, valuesToInput(values));
       toast("保存しました");
-      navigate(`/patterns/${id}`, { replace: true });
+      goBack();
     } catch (err) {
       showError(err, "保存できませんでした。もう一度お試しください。");
     } finally {
@@ -42,7 +43,7 @@ export default function EditPattern() {
   return (
     <form className="page form" onSubmit={submit}>
       <header className="page-header">
-        <button type="button" className="btn btn-ghost" onClick={() => navigate(-1)}>
+        <button type="button" className="btn btn-ghost" onClick={goBack}>
           キャンセル
         </button>
         <h1>作品を編集</h1>

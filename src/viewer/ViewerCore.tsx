@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useGoBack } from "../hooks/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { db } from "../db/db";
@@ -43,6 +44,8 @@ const FOCUS_RATIO = 0.35;
 
 export function ViewerCore({ file, source, initialViewState }: { file: PatternFile; source: ViewerSource; initialViewState?: ViewState }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const goBack = useGoBack(`/patterns/${file.patternId}`);
   const { confirm, showError } = useFeedback();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -293,7 +296,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   return (
     <div className="viewer">
       <header className="viewer-bar">
-        <button type="button" className="icon-btn" aria-label="作品詳細に戻る" onClick={() => navigate(`/patterns/${file.patternId}`)}>
+        <button type="button" className="icon-btn" aria-label="作品詳細に戻る" onClick={goBack}>
           ‹
         </button>
         {otherFiles.length > 1 ? (
@@ -301,7 +304,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
             className="viewer-file-select"
             aria-label="表示するファイル"
             value={file.id}
-            onChange={(e) => navigate(`/patterns/${file.patternId}/files/${e.target.value}`, { replace: true })}
+            onChange={(e) => navigate(`/patterns/${file.patternId}/files/${e.target.value}`, { replace: true, state: location.state })}
           >
             {otherFiles.map((f) => (
               <option key={f.id} value={f.id}>

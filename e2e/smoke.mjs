@@ -344,6 +344,53 @@ await step("ファイル本体が失われている場合はエラーを表示�
   await page.getByRole("link", { name: "作品に戻る" }).click();
 });
 
+await step("戻るボタンが作品詳細とPDFの間でループしない", async () => {
+  const atLibrary = () => page.locator(".page.library").waitFor();
+  const atDetail = () => page.locator(".detail-title", { hasText: "ケーブル編みのセーター" }).waitFor();
+  const back = () => page.getByRole("button", { name: "‹ 戻る" }).click();
+  const viewerBack = () => page.getByRole("button", { name: "作品詳細に戻る" }).click();
+
+  mark("pdf-link");
+  await page.goto(base + "#/library");
+  await page.getByText("ケーブル編みのセーター").click();
+  await atDetail();
+  await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
+  await canvasReady(1);
+  await viewerBack();
+  await atDetail();
+  await back();
+  await atLibrary();
+
+  mark("start-button");
+  await page.getByText("ケーブル編みのセーター").click();
+  await page.locator(".btn-start").click();
+  await page.locator(".viewer").waitFor();
+  await viewerBack();
+  await atDetail();
+  await back();
+  await atLibrary();
+
+  mark("edit");
+  await page.getByText("ケーブル編みのセーター").click();
+  await page.getByRole("link", { name: "編集" }).click();
+  await page.getByRole("button", { name: "変更を保存する" }).click();
+  await atDetail();
+  await back();
+  await atLibrary();
+
+  mark("direct-open");
+  // PDF を直接開いた場合（再読み込みなど）も、戻るは作品詳細 → ライブラリの順
+  await page.getByText("ケーブル編みのセーター").click();
+  await page.getByRole("link", { name: /Cable Sweater\.pdf/ }).click();
+  await canvasReady(1);
+  await page.reload();
+  await canvasReady(1);
+  await viewerBack();
+  await atDetail();
+  await back();
+  await atLibrary();
+});
+
 await step("作品の削除（確認あり）", async () => {
   await page.goto(base + "#/library");
   await page.getByText("mohair beret").click();

@@ -23,6 +23,7 @@ import { formatBytes, formatDate, formatPrice } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
 import { inspectPdf } from "../lib/pdf";
 import { canFetchUrlInfo, fetchImage, fetchPageInfo } from "../lib/fetchUrl";
+import { BACK_STATE, useGoBack } from "../hooks/navigation";
 
 /** 「続きから編む」で開くファイル：最後に開いたもの → 日本語版 → 先頭 */
 export function primaryFile(files: PatternFile[]): PatternFile | undefined {
@@ -59,7 +60,7 @@ export default function PatternDetail() {
       <header className="page-header">
         <BackButton />
         <h1 className="visually-hidden">{pattern.title}</h1>
-        <Link className="btn btn-ghost" to={`/patterns/${id}/edit`}>
+        <Link className="btn btn-ghost" to={`/patterns/${id}/edit`} state={BACK_STATE}>
           編集
         </Link>
       </header>
@@ -118,12 +119,12 @@ export default function PatternDetail() {
 }
 
 function BackButton() {
-  const navigate = useNavigate();
+  const goBack = useGoBack("/library");
   return (
     <button
       type="button"
       className="btn btn-ghost"
-      onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/library"))}
+      onClick={goBack}
     >
       ‹ 戻る
     </button>
@@ -143,7 +144,7 @@ function StartButton({ pattern, files }: { pattern: Pattern; files: PatternFile[
       onClick={async () => {
         try {
           if (pattern.status !== "in_progress" && pattern.status !== "done") await setStatus(pattern.id, "in_progress");
-          if (target) navigate(`/patterns/${pattern.id}/files/${target.id}`);
+          if (target) navigate(`/patterns/${pattern.id}/files/${target.id}`, { state: BACK_STATE });
         } catch (e) {
           showError(e);
         }
@@ -369,7 +370,7 @@ function FileRow({ file }: { file: PatternFile }) {
   const isPdf = file.mimeType === "application/pdf";
   return (
     <li className="file-row">
-      <Link to={`/patterns/${file.patternId}/files/${file.id}`} className="file-open">
+      <Link to={`/patterns/${file.patternId}/files/${file.id}`} state={BACK_STATE} className="file-open">
         <span className={`file-icon ${isPdf ? "pdf" : "img"}`}>{isPdf ? "PDF" : "IMG"}</span>
         <span className="file-info">
           <span className="file-name break">{file.name}</span>

@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import type { Pattern, PatternFile } from "../db/types";
 import { Cover, EmptyState, PatternCard, StatusBadge } from "../components/PatternParts";
+import { BACK_STATE } from "../hooks/navigation";
 
 export default function Home() {
   const patterns = useLiveQuery(() => db.patterns.toArray(), []);
@@ -88,7 +89,7 @@ export default function Home() {
 
 function WipCard({ pattern }: { pattern: Pattern }) {
   return (
-    <Link to={`/patterns/${pattern.id}`} className="wip-card">
+    <Link to={`/patterns/${pattern.id}`} state={BACK_STATE} className="wip-card">
       <Cover pattern={pattern} className="wip-cover" />
       <div className="wip-body">
         <StatusBadge status={pattern.status} />

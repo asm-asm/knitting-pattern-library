@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { BACK_STATE } from "../hooks/navigation";
 import type { Category, Pattern, PatternFile, PatternStatus } from "../db/types";
 import { STATUS_LABELS } from "../db/types";
 import { useBlobUrl } from "../hooks/hooks";
@@ -72,7 +73,7 @@ export function PdfIndicator({ files }: { files: PatternFile[] | undefined }) {
 
 export function PatternCard({ pattern, files }: { pattern: Pattern; files?: PatternFile[] }) {
   return (
-    <Link to={`/patterns/${pattern.id}`} className="card">
+    <Link to={`/patterns/${pattern.id}`} state={BACK_STATE} className="card">
       <div className="card-cover">
         <Cover pattern={pattern} />
         <FavoriteButton pattern={pattern} size="sm" />
@@ -99,7 +100,7 @@ export function PatternRow({
 }) {
   const catNames = pattern.categoryIds.map((id) => categories.get(id)?.name).filter(Boolean);
   return (
-    <Link to={`/patterns/${pattern.id}`} className="row">
+    <Link to={`/patterns/${pattern.id}`} state={BACK_STATE} className="row">
       <Cover pattern={pattern} className="row-thumb" />
       <div className="row-body">
         <div className="row-title">{pattern.title}</div>
