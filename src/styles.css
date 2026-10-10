@@ -479,3 +479,25 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
   .grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 26px 20px; }
   .card-title { font-size: 1.02rem; }
 }
+
+/* これ持ってる？ */
+.header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.header-actions .btn { padding-inline: 14px; }
+.check-search { display: grid; gap: 10px; }
+.check-scan { min-height: 64px; font-size: 1.15rem; border-radius: var(--radius); }
+.verdict { display: grid; gap: 2px; padding: 14px 16px; border-radius: var(--radius); margin-bottom: 12px; border: 2px solid transparent; }
+.verdict strong { font-size: 1.3rem; }
+.verdict span { font-size: 0.9rem; }
+.verdict.owned { background: color-mix(in srgb, var(--st-in_progress) 16%, var(--surface)); border-color: var(--st-in_progress); color: var(--text); }
+.verdict.owned strong { color: var(--st-in_progress); }
+.verdict.maybe { background: color-mix(in srgb, var(--st-preparing) 16%, var(--surface)); border-color: var(--st-preparing); }
+.verdict.maybe strong { color: var(--st-preparing); }
+.verdict.not-owned { background: var(--surface); border-color: var(--line); }
+.verdict.pending { background: var(--surface); color: var(--muted); }
+.check-items { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.check-book { display: grid; grid-template-columns: 96px 1fr; gap: 14px; background: var(--surface); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.check-book-cover { width: 96px; border-radius: 6px; grid-row: span 2; }
+.check-book-info p { margin: 0; }
+.check-book-title { font-weight: 700; font-size: 1.05rem; line-height: 1.4; }
+.check-book-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check-book:not(:has(.check-book-cover)) { grid-template-columns: 1fr; }

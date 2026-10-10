@@ -8,6 +8,8 @@ import { stripExtension } from "../lib/format";
 import { Field, PatternFields, emptyValues, valuesToInput } from "./PatternForm";
 import { clearHandoff, peekHandoff } from "./Import";
 import { fetchImage } from "../lib/fetchUrl";
+import { clearBookPrefill, peekBookPrefill } from "../lib/bookHandoff";
+import { formatIsbn } from "../lib/isbn";
 import { BACK_STATE } from "../hooks/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
@@ -25,6 +27,17 @@ export default function NewPattern() {
   const [params] = useSearchParams();
   const [values, setValues] = useState(() => {
     const t = params.get("type");
+    // 「これ持ってる？」から来た場合は、調べた本の情報を入れておく
+    const pre = peekBookPrefill();
+    if (pre) {
+      return {
+        ...emptyValues(pre.itemType),
+        isbn: pre.isbn ? formatIsbn(pre.isbn) : "",
+        title: pre.title ?? "",
+        author: pre.author ?? "",
+        publisher: pre.publisher ?? "",
+      };
+    }
     const v = emptyValues(t === "book" || t === "ebook" ? t : "pattern");
     const book = params.get("book");
     if (book && v.itemType === "pattern") v.sourceBookId = book;
@@ -41,6 +54,20 @@ export default function NewPattern() {
   const coverPreview = useMemo(() => (coverFile ? URL.createObjectURL(coverFile) : undefined), [coverFile]);
   useEffect(() => () => void (coverPreview && URL.revokeObjectURL(coverPreview)), [coverPreview]);
   const autoTitle = files[0] ? stripExtension(files[0].file.name) : undefined;
+  useEffect(() => {
+    const pre = peekBookPrefill();
+    clearBookPrefill();
+    if (!pre?.coverUrl) return;
+    setLoadingCover(true);
+    fetchImage(pre.coverUrl)
+      .then((img) => {
+        if (img) {
+          setCoverFile(img);
+          setCoverFromUrl(true);
+        }
+      })
+      .finally(() => setLoadingCover(false));
+  }, []);
   const [pdfCover, setPdfCover] = useState(true);
   const [busy, setBusy] = useState(false);
   const counts = useLiveQuery(async () => countByKind(await db.patterns.toArray()), []);

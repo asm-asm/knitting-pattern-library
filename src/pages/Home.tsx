@@ -43,9 +43,14 @@ export default function Home() {
     <div className="page home">
       <header className="page-header">
         <h1>ホーム</h1>
-        <Link to="/new" className="btn btn-primary">
-          ＋ 登録
-        </Link>
+        <div className="header-actions">
+          <Link to="/check" state={BACK_STATE} className="btn btn-accent">
+            これ持ってる？
+          </Link>
+          <Link to="/new" className="btn btn-primary">
+            ＋ 登録
+          </Link>
+        </div>
       </header>
 
       {patterns.length === 0 ? (
