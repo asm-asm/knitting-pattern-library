@@ -424,3 +424,10 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .import .btn-block { margin-bottom: 8px; }
 .cover-preview { width: 96px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-sm); box-shadow: var(--shadow); }
 .cover-pick-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+
+/* 作品詳細の「制作を始める」「PDFを見る」 */
+.start-actions { display: grid; gap: 10px; margin-top: 8px; }
+.start-actions.two { grid-template-columns: 1fr 1fr; }
+.start-actions .btn-start { margin-top: 0; min-width: 0; }
+.btn-view { border: 1.5px solid var(--primary); color: var(--primary); font-weight: 700; }
+.btn-start .btn-sub { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

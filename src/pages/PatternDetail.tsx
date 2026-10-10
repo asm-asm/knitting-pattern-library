@@ -135,24 +135,37 @@ function StartButton({ pattern, files }: { pattern: Pattern; files: PatternFile[
   const navigate = useNavigate();
   const { showError } = useFeedback();
   const target = primaryFile(files);
-  const inProgress = pattern.status === "in_progress";
-  const label = inProgress ? "続きから編む" : pattern.status === "paused" ? "制作を再開する" : pattern.status === "done" ? "もう一度開く" : "制作を始める";
+  const open = () => target && navigate(`/patterns/${pattern.id}/files/${target.id}`, { state: BACK_STATE });
+  const viewLabel = target?.mimeType === "application/pdf" ? "PDFを見る" : "ファイルを見る";
+  const startLabel = pattern.status === "in_progress" ? "続きから編む" : pattern.status === "paused" ? "制作を再開する" : "制作を始める";
+  const done = pattern.status === "done";
   return (
-    <button
-      type="button"
-      className="btn btn-primary btn-start"
-      onClick={async () => {
-        try {
-          if (pattern.status !== "in_progress" && pattern.status !== "done") await setStatus(pattern.id, "in_progress");
-          if (target) navigate(`/patterns/${pattern.id}/files/${target.id}`, { state: BACK_STATE });
-        } catch (e) {
-          showError(e);
-        }
-      }}
-    >
-      {label}
-      {target && <small className="btn-sub">{target.name}</small>}
-    </button>
+    <div className={`start-actions ${target && !done ? "two" : ""}`}>
+      {!done && (
+        <button
+          type="button"
+          className="btn btn-primary btn-start"
+          onClick={async () => {
+            try {
+              if (pattern.status !== "in_progress") await setStatus(pattern.id, "in_progress");
+              open();
+            } catch (e) {
+              showError(e);
+            }
+          }}
+        >
+          {startLabel}
+          {!target && <small className="btn-sub">ステータスを「制作中」にします</small>}
+        </button>
+      )}
+      {target && (
+        // ステータスは変えずにファイルだけ開く
+        <button type="button" className={`btn btn-start ${done ? "btn-primary" : "btn-view"}`} onClick={open}>
+          {viewLabel}
+          <small className="btn-sub">{target.name}</small>
+        </button>
+      )}
+    </div>
   );
 }
 
