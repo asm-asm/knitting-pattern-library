@@ -32,7 +32,7 @@ export default function NewPattern() {
     return first ? { ...v, title: stripExtension(first.file.name) } : v;
   });
   const isBook = isBookType(values.itemType);
-  const noun = isBook ? "本" : "作品";
+  const noun = isBook ? ITEM_TYPE_LABELS[values.itemType] : "作品";
   useEffect(() => clearHandoff(), []);
   const [coverFile, setCoverFile] = useState<File>();
   // URL から取得した表紙か（自分で選んだ画像は URL の画像で置き換えない）

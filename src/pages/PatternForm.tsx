@@ -293,6 +293,64 @@ export function PatternFields({
       setLooking(false);
     }
   };
+  // ---- 電子書籍：ストアのページ（Kindle・honto・BOOK☆WALKER など）から読み込む ----
+  const [loadingEbook, setLoadingEbook] = useState(false);
+  const ebookFetched = useRef<string | null>(null);
+  const loadEbook = async (silent = false) => {
+    const url = latest.current.ebookUrl.trim();
+    if (!url || loadingEbook) return;
+    ebookFetched.current = url;
+    setLoadingEbook(true);
+    try {
+      const info = await fetchPageInfo(url);
+      const v = { ...latest.current };
+      const filled: string[] = [];
+      const fill = (k: "title" | "author" | "publisher" | "shopName", val: string | undefined, label: string) => {
+        if (val && !v[k].trim()) {
+          v[k] = val;
+          filled.push(label);
+        }
+      };
+      if (info.title && replaceableTitle && v.title === replaceableTitle) v.title = "";
+      fill("title", info.title, "書名");
+      fill("author", info.author, "著者");
+      fill("publisher", info.publisher, "出版社");
+      fill("shopName", info.shopName, "ストア");
+      if (info.price !== undefined && !v.price.trim()) {
+        v.price = String(info.price);
+        if (info.currency && CURRENCIES.includes(info.currency)) v.currency = info.currency;
+        filled.push("価格");
+      }
+      if (info.isbn && !v.isbn.trim()) {
+        v.isbn = formatIsbn(info.isbn);
+        filled.push("ISBN");
+      }
+      let coverUrl = info.imageUrl;
+      // ページに ISBN があれば、本のデータベースで著者などを補う
+      if (info.isbn && (!v.author.trim() || !v.publisher.trim() || !coverUrl)) {
+        const book = await lookupBook(info.isbn).catch(() => undefined);
+        if (book) {
+          fill("author", book.author, "著者");
+          fill("publisher", book.publisher, "出版社");
+          coverUrl ??= book.coverUrl;
+        }
+      }
+      update(v);
+      if (coverUrl) onCoverUrl?.(coverUrl);
+      if (filled.some((x) => x === "ストア" || x === "価格")) setOpenDetails(true);
+      if (filled.length || coverUrl) toast(`URLから読み込みました：${[...filled, ...(coverUrl ? ["表紙"] : [])].join("・")}`);
+      else if (!silent) toast("このページからは情報を読み込めませんでした。書名などを手入力してください。", "error");
+    } catch (e) {
+      showError(e, "URLから情報を読み込めませんでした。書名などを手入力してください。");
+    } finally {
+      setLoadingEbook(false);
+    }
+  };
+  const maybeLoadEbook = () => {
+    const url = latest.current.ebookUrl.trim();
+    if (canFetch && /^(https?:\/\/)?[^\s/]+\.[^\s]+/.test(url) && ebookFetched.current !== url) void loadEbook(true);
+  };
+
   const scan = async () => {
     try {
       const code = await scanIsbnBarcode();
@@ -308,9 +366,39 @@ export function PatternFields({
   return (
     <>
       <section className="form-section">
+        {values.itemType === "ebook" && (
+          <Field
+            label="電子書籍のURL"
+            htmlFor="f-ebook"
+            hint={
+              canFetch
+                ? "Kindle・honto・BOOK☆WALKER などの作品ページのURLを貼ると、書名・著者・表紙を読み込みます。登録後は、作品の画面からこのページをワンタップで開けます。"
+                : "Kindle などの作品ページのURL。作品の画面からワンタップで開けます（ブラウザ版では情報の読み込みはできません）。"
+            }
+          >
+            <input
+              id="f-ebook"
+              className="input"
+              type="url"
+              inputMode="url"
+              autoCapitalize="off"
+              autoCorrect="off"
+              placeholder="https://"
+              value={values.ebookUrl}
+              onChange={(e) => set("ebookUrl", e.target.value)}
+              onPaste={() => setTimeout(maybeLoadEbook, 0)}
+              onBlur={maybeLoadEbook}
+            />
+            {canFetch && values.ebookUrl.trim() && (
+              <button type="button" className="btn btn-small btn-accent suggest" disabled={loadingEbook} onClick={() => loadEbook()}>
+                {loadingEbook ? "読み込み中…" : "URLから情報を読み込む"}
+              </button>
+            )}
+          </Field>
+        )}
         {isBook && (
           <Field
-            label="ISBN（本の裏の13桁の番号）"
+            label={values.itemType === "ebook" ? "ISBN（任意）" : "ISBN（本の裏の13桁の番号）"}
             htmlFor="f-isbn"
             hint={
               canScanBarcode()
@@ -344,21 +432,7 @@ export function PatternFields({
             </Field>
           </div>
         )}
-        {values.itemType === "ebook" && (
-          <Field label="電子書籍を開くリンク" htmlFor="f-ebook" hint="Kindle・楽天Kobo などのストアや本棚のページのURL。作品の画面からワンタップで開けます。">
-            <input
-              id="f-ebook"
-              className="input"
-              type="url"
-              inputMode="url"
-              autoCapitalize="off"
-              autoCorrect="off"
-              placeholder="https://"
-              value={values.ebookUrl}
-              onChange={(e) => set("ebookUrl", e.target.value)}
-            />
-          </Field>
-        )}
+        {values.itemType !== "ebook" && (
         <Field
           label="購入先URL"
           htmlFor="f-url"
@@ -402,6 +476,7 @@ export function PatternFields({
             </button>
           )}
         </Field>
+        )}
         {extraBasic}
         {!isBook && (
           <Field label="制作ステータス">

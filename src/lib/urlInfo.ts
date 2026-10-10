@@ -1,5 +1,6 @@
 // 購入先ページの HTML から作品情報を取り出す（通信は行わない純粋関数）。
 // 一般的なサイトは JSON-LD（schema.org Product）と OGP、Ravelry は項目一覧から読み取る。
+import { normalizeIsbn } from "./isbn";
 
 export interface PageInfo {
   title?: string;
@@ -14,9 +15,15 @@ export interface PageInfo {
   size?: string;
   /** アプリのカテゴリ名の候補（例：「セーター」） */
   categoryHints: string[];
+  // ---- 本・電子書籍のページ ----
+  /** 著者（ブランド名は含めない） */
+  author?: string;
+  publisher?: string;
+  /** ISBN-13（ページに載っていれば） */
+  isbn?: string;
 }
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rarr: "→", hellip: "…" };
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rarr: "→", hellip: "…", lrm: "‎", rlm: "‏" };
 
 export function decodeEntities(s: string): string {
   return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
@@ -66,7 +73,8 @@ function findProduct(html: string): Json | undefined {
       else if (v && typeof v === "object") {
         const o = v as Json;
         const t = o["@type"];
-        if (t === "Product" || (Array.isArray(t) && t.includes("Product"))) return o;
+        const types = Array.isArray(t) ? t : [t];
+        if (types.includes("Product") || types.includes("Book")) return o;
         if (o["@graph"]) stack.push(o["@graph"]);
       }
     }
@@ -132,7 +140,8 @@ export function extractPageInfo(html: string, pageUrl: string): PageInfo {
   const info: PageInfo = {
     title: clean(nameOf(product?.name) ?? byMatch?.[1] ?? ogTitle ?? (docTitle ? text(docTitle) : undefined)),
     designer: clean(nameOf(product?.author) ?? nameOf(product?.brand) ?? byMatch?.[2]),
-    shopName: clean(metaContent(html, "og:site_name")) ?? (host || undefined),
+    // 「電子書籍ストア | BOOK☆WALKER」のような名前は、最後の部分（店名）だけにする
+    shopName: clean(metaContent(html, "og:site_name")?.split(/\s*[|｜]\s*/).filter(Boolean).pop()) ?? (host || undefined),
     price: price !== undefined && Number.isFinite(price) && price >= 0 ? price : undefined,
     currency: clean(currency, 3)?.toUpperCase(),
     imageUrl: firstStr(product?.image) ?? metaContent(html, "og:image") ?? metaContent(html, "twitter:image"),
@@ -152,6 +161,16 @@ export function extractPageInfo(html: string, pageUrl: string): PageInfo {
     info.categoryHints = categoryHintsFrom(nameOf(product?.category) ?? info.title);
   }
 
+  // ---- 本・電子書籍 ----
+  const productTypes = Array.isArray(product?.["@type"]) ? (product?.["@type"] as string[]) : [product?.["@type"]];
+  const isBookLd = productTypes.includes("Book");
+  info.author = clean(nameOf(product?.author) ?? metaContent(html, "book:author") ?? metaContent(html, "author"));
+  info.publisher = clean(nameOf(product?.publisher) ?? (isBookLd || /honto\.jp$/.test(host) ? nameOf(product?.brand) : undefined));
+  const isbnRaw = [product?.isbn, product?.gtin13, product?.productID, metaContent(html, "book:isbn")].find((v) => typeof v === "string");
+  info.isbn = normalizeIsbn(isbnRaw as string | undefined);
+
+  if (/(^|\.)amazon\.(co\.jp|com)$/.test(host)) Object.assign(info, amazonInfo(html));
+
   if (info.imageUrl) {
     try {
       // 相対パスを絶対 URL にし、Ravelry の「#webp」などの断片は取り除く
@@ -163,4 +182,38 @@ export function extractPageInfo(html: string, pageUrl: string): PageInfo {
     }
   }
   return info;
+}
+
+/**
+ * Amazon（Kindle）の商品ページ。OGP や JSON-LD がないため、ページのタイトルなどから読み取る。
+ * 例：「書名 | 著者 | 手芸 | Kindleストア | Amazon」
+ *     「Amazon.co.jp: 書名 eBook : 著者: Kindleストア」
+ */
+export function amazonInfo(html: string): Partial<PageInfo> {
+  const out: Partial<PageInfo> = { shopName: "Amazon" };
+  const title = decodeEntities((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? metaContent(html, "title") ?? "").trim());
+  const old = /^Amazon\.co\.jp[:：]\s*(.+?)\s+eBook\s*[:：]\s*(.+?)\s*[:：]\s*Kindle/.exec(title);
+  if (old) {
+    out.title = clean(old[1]);
+    out.author = clean(old[2]);
+  } else {
+    const parts = title.split(/\s+\|\s+/);
+    if (parts.length >= 3) {
+      out.title = clean(parts[0]);
+      if (!/Kindle|Amazon|ストア/.test(parts[1])) out.author = clean(parts[1]);
+    }
+  }
+  // 出版社（商品の詳細欄）
+  const i = html.indexOf("出版社");
+  if (i >= 0) {
+    const t = text(html.slice(i, i + 400)).replace(/[\u200e\u200f]/g, "");
+    const m = /出版社\s*[:：]?\s*([^\s(（:：][^(（]*?)\s*(?:[（(]|発売|言語|$)/.exec(t);
+    if (m) out.publisher = clean(m[1]);
+  }
+  // 表紙画像：一番大きいもの、なければ商品画像
+  const big = /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9%+_.-]+?\._SL1[0-9]{3}_\.jpg/.exec(html)?.[0];
+  const product = /&quot;productImage&quot;:&quot;(https:\/\/m\.media-amazon\.com\/images\/I\/[^&]+)&quot;/.exec(html)?.[1];
+  const img = big ?? product;
+  if (img) out.imageUrl = img;
+  return out;
 }

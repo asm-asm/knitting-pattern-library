@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryHintsFrom, extractPageInfo } from "./urlInfo";
+import { amazonInfo, categoryHintsFrom, extractPageInfo } from "./urlInfo";
 
 // Ravelry のパターンページと同じ構造の最小サンプル
 const ravelry = `
@@ -74,5 +74,50 @@ describe("URL からの作品情報の抽出", () => {
     expect(categoryHintsFrom("Accessories → Hat → Beanie, Toque")).toEqual(["帽子"]);
     expect(categoryHintsFrom("Neck / Torso → Shawl / Wrap")).toEqual(["ショール"]);
     expect(categoryHintsFrom("Home → Blanket")).toEqual([]);
+  });
+});
+
+describe("電子書籍ストアのページ", () => {
+  it("Kindle（Amazon）：ページのタイトル・出版社・表紙から読み取る", () => {
+    const html = `<html><head><title>新版　棒針編みの基本BOOK | 鎌田 恵美子 | 手芸 | Kindleストア | Amazon</title></head><body>
+      <img src="https://m.media-amazon.com/images/I/81oQ7TYMLlL._SS63_.jpg">
+      <script>var a = "https://m.media-amazon.com/images/I/81oQ7TYMLlL._SL1500_.jpg";</script>
+      <ul><li><span class="a-text-bold">出版社 &rlm; : &lrm;</span> <span>マイナビ出版 (2020/10/23)</span></li></ul></body></html>`;
+    expect(extractPageInfo(html, "https://www.amazon.co.jp/dp/B08LZFK5NF")).toMatchObject({
+      title: "新版 棒針編みの基本BOOK",
+      author: "鎌田 恵美子",
+      publisher: "マイナビ出版",
+      shopName: "Amazon",
+      imageUrl: "https://m.media-amazon.com/images/I/81oQ7TYMLlL._SL1500_.jpg",
+    });
+  });
+
+  it("Kindle（Amazon）：古い形式のタイトル", () => {
+    expect(amazonInfo("<title>Amazon.co.jp: かぎ針の本 eBook : 山田 花子: Kindleストア</title>")).toMatchObject({
+      title: "かぎ針の本",
+      author: "山田 花子",
+    });
+  });
+
+  it("honto：JSON-LD から書名・出版社・ISBN・価格", () => {
+    const html = `<meta property="og:site_name" content="honto"><script type="application/ld+json">{"@type":"Product","name":"俳句とあそぶ法","image":"https://img.honto.jp/item/1.jpg","productID":"978-4-12-207350-0","brand":{"@type":"Brand","name":"中央公論新社"},"offers":{"price":"990","priceCurrency":"JPY"}}</script>`;
+    expect(extractPageInfo(html, "https://honto.jp/ebook/pd_32456789.html")).toMatchObject({
+      title: "俳句とあそぶ法",
+      publisher: "中央公論新社",
+      isbn: "9784122073500",
+      price: 990,
+      currency: "JPY",
+      shopName: "honto",
+    });
+  });
+
+  it("BOOK☆WALKER：店名を短くする", () => {
+    const html = `<meta property="og:site_name" content="電子書籍ストア | BOOK☆WALKER"><meta property="og:title" content="手編みの時間 vol.13">`;
+    expect(extractPageInfo(html, "https://bookwalker.jp/de1/")).toMatchObject({ title: "手編みの時間 vol.13", shopName: "BOOK☆WALKER" });
+  });
+
+  it("schema.org の Book（著者・出版社・ISBN）", () => {
+    const html = `<script type="application/ld+json">{"@type":"Book","name":"編み物の本","author":{"@type":"Person","name":"佐藤 編子"},"publisher":{"@type":"Organization","name":"手芸社"},"isbn":"9780306406157"}</script>`;
+    expect(extractPageInfo(html, "https://example.com/b")).toMatchObject({ title: "編み物の本", author: "佐藤 編子", publisher: "手芸社", isbn: "9780306406157" });
   });
 });

@@ -74,8 +74,13 @@ await step("電子書籍を登録すると「電子書籍を開く」が出る",
   await page.goto(base + "#/new?type=ebook");
   await page.reload();
   await page.getByRole("tab", { name: "電子書籍", selected: true }).waitFor();
+  // 電子書籍では URL の欄が一番上に来る
+  const firstLabel = await page.locator(".form-section .field label").first().textContent();
+  if (firstLabel !== "電子書籍のURL") throw new Error("一番上が電子書籍のURLではない: " + firstLabel);
+  if (await page.getByLabel("購入先URL").count()) throw new Error("電子書籍に購入先URL欄が出ている");
+  await page.getByLabel("電子書籍のURL").fill("https://example.com/ebook/123");
   await page.getByLabel("書名（必須）").fill("かぎ針の電子書籍");
-  await page.getByLabel("電子書籍を開くリンク").fill("https://example.com/ebook/123");
+  await page.screenshot({ path: join(outDir, "books-05-ebook-new.png") });
   await page.getByRole("button", { name: "この内容で登録する" }).click();
   await page.getByRole("button", { name: /電子書籍を開く/ }).waitFor();
 });
