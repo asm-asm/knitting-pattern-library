@@ -363,7 +363,7 @@ await step("戻るボタンが作品詳細とPDFの間でループしない", as
 
   mark("start-button");
   await page.getByText("ケーブル編みのセーター").click();
-  await page.locator(".btn-start").click();
+  await page.getByRole("button", { name: /続きから編む|制作を再開する|制作を始める/ }).click();
   await page.locator(".viewer").waitFor();
   await viewerBack();
   await atDetail();
