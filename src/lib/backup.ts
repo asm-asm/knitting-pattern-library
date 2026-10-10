@@ -179,6 +179,12 @@ function cleanPattern(r: Record<string, unknown>): Pattern | null {
   };
 }
 
+function cleanRuler(v: unknown): PatternFile["ruler"] {
+  const r = v as Record<string, unknown> | undefined;
+  if (!r || !isNum(r.page) || !isNum(r.y) || !isNum(r.height)) return undefined;
+  return { page: r.page, y: r.y, height: r.height, visible: r.visible === true, counterId: optStr(r.counterId) };
+}
+
 function cleanFile(r: Record<string, unknown>): PatternFile | null {
   if (!isStr(r.id) || !isStr(r.patternId) || !isStr(r.blobId) || !isStr(r.name)) return null;
   const vs = r.viewState as Record<string, unknown> | undefined;
@@ -193,6 +199,7 @@ function cleanFile(r: Record<string, unknown>): PatternFile | null {
     blobId: r.blobId,
     pageCount: optNum(r.pageCount),
     lastOpenedAt: optNum(r.lastOpenedAt),
+    ruler: cleanRuler(r.ruler),
     viewState:
       vs && isNum(vs.page) && isNum(vs.zoom)
         ? { page: vs.page, zoom: vs.zoom, scrollXRatio: optNum(vs.scrollXRatio) ?? 0, scrollYRatio: optNum(vs.scrollYRatio) ?? 0 }

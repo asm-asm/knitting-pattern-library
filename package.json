@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "test:e2e": "node e2e/smoke.mjs && node e2e/import.mjs && node e2e/books.mjs"
+    "test:e2e": "node e2e/smoke.mjs && node e2e/import.mjs && node e2e/books.mjs && node e2e/ruler.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.2",

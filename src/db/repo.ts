@@ -1,6 +1,6 @@
 // データ操作の窓口。UI はここを通して保存・削除を行う。
 import { db as defaultDb, type LibraryDB } from "./db";
-import type { Annotation, Category, FileKind, Pattern, PatternFile, PatternStatus, ViewState } from "./types";
+import type { Annotation, Category, FileKind, Pattern, PatternFile, PatternStatus, RulerState, ViewState } from "./types";
 import { newId } from "../lib/id";
 import { normalizeIsbn } from "../lib/isbn";
 import { blobStoreFor } from "../storage/blobStore";
@@ -285,6 +285,10 @@ export async function deleteFile(fileId: string, db: LibraryDB = defaultDb) {
     return f.blobId;
   });
   await deleteBlobsAfter(db, [blobId]);
+}
+
+export async function saveRuler(fileId: string, ruler: RulerState, db: LibraryDB = defaultDb) {
+  await db.files.update(fileId, { ruler });
 }
 
 export async function saveViewState(fileId: string, viewState: ViewState, db: LibraryDB = defaultDb) {

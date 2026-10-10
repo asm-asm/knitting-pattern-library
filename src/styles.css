@@ -459,3 +459,17 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .book-pattern { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; padding: 8px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
 .book-pattern .row-thumb { width: 56px; }
 .stat-label { line-height: 1.35; display: block; }
+
+/* 編み図の定規（行マーカー） */
+.ruler-layer { position: absolute; inset: 0; pointer-events: none; }
+.ruler-dim { position: absolute; left: 0; right: 0; background: rgba(40, 28, 20, 0.28); }
+.ruler-band { position: absolute; left: 0; right: 0; border-top: 2px solid #e0603f; border-bottom: 2px solid #e0603f; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6); }
+.ruler-band.draggable { pointer-events: auto; touch-action: none; cursor: ns-resize; }
+.ruler-grip { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 28px; height: 18px; border-radius: 6px; background: #e0603f; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
+.ruler-grip::before, .ruler-grip::after { content: ""; position: absolute; left: 7px; right: 7px; height: 2px; background: #fff; border-radius: 1px; }
+.ruler-grip::before { top: 6px; }
+.ruler-grip::after { bottom: 6px; }
+.ruler-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--surface); border-top: 1px solid var(--line); overflow-x: auto; flex: none; }
+.ruler-step { min-width: 84px; font-weight: 700; }
+.ruler-step.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.ruler-link { min-height: 40px; border: 1px solid var(--input-border); border-radius: 999px; background: var(--input-bg); padding: 4px 10px; font-size: 16px; flex: none; }

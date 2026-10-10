@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { anchorAt, computeLayout, pageIndexAt, renderRange, scrollForAnchor, TOP_PAD } from "./layout";
 import { hitsInk, inkPath } from "./ink";
+import { clampRuler, newRuler, resizeRuler, stepRuler } from "./ruler";
 
 const A4 = { w: 595, h: 842 };
 
@@ -53,5 +54,26 @@ describe("手書き線", () => {
   });
   it("SVG パスはページ比率の座標系で出力される", () => {
     expect(inkPath([0, 0, 1, 1], aspect)).toBe(`M0.0 0.0L1000.0 ${(1000 * aspect).toFixed(1)}`);
+  });
+});
+
+
+describe("編み図の定規", () => {
+  it("次の段へ進むと帯の太さぶん上へ動き、前の段へ戻ると下へ動く", () => {
+    const r = { page: 2, y: 0.5, height: 0.04, visible: true };
+    expect(stepRuler(r, 1).y).toBeCloseTo(0.46);
+    expect(stepRuler(r, -2).y).toBeCloseTo(0.58);
+  });
+  it("ページの上下からはみ出さない", () => {
+    const r = { page: 1, y: 0.03, height: 0.04, visible: true };
+    expect(stepRuler(r, 5).y).toBeCloseTo(0.02);
+    expect(stepRuler({ ...r, y: 0.97 }, -5).y).toBeCloseTo(0.98);
+  });
+  it("太さを変えても中心は保ち、極端な太さにはならない", () => {
+    const r = newRuler(1, 0.5);
+    expect(resizeRuler(r, 1.25).y).toBeCloseTo(0.5);
+    expect(resizeRuler(r, 100).height).toBe(0.25);
+    expect(resizeRuler(r, 0.001).height).toBe(0.01);
+    expect(clampRuler({ ...r, y: -1 }).y).toBeCloseTo(r.height / 2);
   });
 });

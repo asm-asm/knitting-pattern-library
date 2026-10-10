@@ -93,3 +93,18 @@ describe("注釈", () => {
     expect(rest.map((a) => (a.type === "note" ? a.text : "")).sort()).toEqual(["2ページ目", "別ファイル"]);
   });
 });
+
+describe("定規の保存", () => {
+  it("ファイルごとに保存され、バックアップで失われない", async () => {
+    const { saveRuler, addFilesToPattern } = await import("./repo");
+    const { createBackup, parseBackup, restoreBackup, wipeAllData } = await import("../lib/backup");
+    const pdf = new TextEncoder().encode("%PDF-1.7\nx").buffer as ArrayBuffer;
+    const [fileId] = await addFilesToPattern(patternId, [{ name: "chart.pdf", kind: "chart", mimeType: "application/pdf", data: pdf }], db);
+    await saveRuler(fileId, { page: 2, y: 0.4, height: 0.03, visible: true, counterId: "c1" }, db);
+    const blob = await createBackup({ includeFiles: true }, db);
+    await wipeAllData(db);
+    await restoreBackup(await parseBackup(blob), "replace", db);
+    const f = (await db.files.toArray())[0];
+    expect(f.ruler).toEqual({ page: 2, y: 0.4, height: 0.03, visible: true, counterId: "c1" });
+  });
+});

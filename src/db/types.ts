@@ -94,6 +94,22 @@ export interface ViewState {
   scrollYRatio: number;
 }
 
+/**
+ * 編み図の定規（行マーカー）。今編んでいる段を帯で示す。ファイルごとに保存する。
+ * 位置と太さはページの高さに対する 0〜1 の割合。
+ */
+export interface RulerState {
+  /** 1始まりのページ番号 */
+  page: number;
+  /** 帯の中心の位置 */
+  y: number;
+  /** 帯の太さ */
+  height: number;
+  visible: boolean;
+  /** 連動する段数カウンター（＋を押すと1段進む） */
+  counterId?: string;
+}
+
 /** 作品に関連付けられたファイル（原本・翻訳版など） */
 export interface PatternFile {
   id: string;
@@ -108,6 +124,7 @@ export interface PatternFile {
   pageCount?: number;
   viewState?: ViewState;
   lastOpenedAt?: number;
+  ruler?: RulerState;
 }
 
 /** ファイル実体。他の作品・ファイルと共有しない（1ファイル=1実体）。 */

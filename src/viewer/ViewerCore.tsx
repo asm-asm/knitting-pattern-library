@@ -9,6 +9,7 @@ import {
   deleteAnnotation,
   deletePageAnnotations,
   restoreAnnotation,
+  saveRuler,
   saveViewState,
   updateNoteText,
 } from "../db/repo";
@@ -29,6 +30,9 @@ import {
 import { PdfPageCanvas } from "./PageView";
 import { AnnotationLayer, type InkStyle, type Tool } from "./AnnotationLayer";
 import { INK_COLORS, MARKER_STYLE, PEN_STYLE } from "./ink";
+import { RulerOverlay } from "./RulerOverlay";
+import { newRuler, resizeRuler, stepRuler } from "./ruler";
+import type { RulerState } from "../db/types";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
 
 export type ViewerSource =
@@ -66,6 +70,17 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   const restored = useRef(false);
 
   const files = useLiveQuery(() => db.files.where("patternId").equals(file.patternId).sortBy("createdAt"), [file.patternId]);
+  const counters = useLiveQuery(() => db.counters.where("patternId").equals(file.patternId).sortBy("order"), [file.patternId]);
+
+  // ---- 編み図の定規（行マーカー） ----
+  const [ruler, setRuler] = useState<RulerState | undefined>(file.ruler);
+  const rulerRef = useRef(ruler);
+  rulerRef.current = ruler;
+  useEffect(() => {
+    if (!ruler) return;
+    const t = setTimeout(() => void saveRuler(file.id, ruler), 300);
+    return () => clearTimeout(t);
+  }, [ruler, file.id]);
   const annotations = useLiveQuery(() => db.annotations.where("fileId").equals(file.id).toArray(), [file.id]);
   const byPage = useMemo(() => {
     const m = new Map<number, Annotation[]>();
@@ -237,6 +252,54 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   const [first, last] = renderRange(layout, scroll.top, size.h || 800);
   const pageCount = source.sizes.length;
 
+  /** 帯が画面の外にあれば、見える位置までスクロールする */
+  const showRuler = useCallback((r: RulerState) => {
+    const el = scrollRef.current;
+    const box = layoutRef.current.pages[r.page - 1];
+    if (!el || !box) return;
+    const top = box.top + (r.y - r.height / 2) * box.height;
+    const bottom = box.top + (r.y + r.height / 2) * box.height;
+    if (top < el.scrollTop + 8 || bottom > el.scrollTop + el.clientHeight - 8) {
+      el.scrollTo({ top: top - el.clientHeight * 0.4, behavior: "smooth" });
+    }
+  }, []);
+  const moveRuler = useCallback(
+    (rows: number) => {
+      const r = rulerRef.current;
+      if (!r) return;
+      const next = stepRuler(r, rows);
+      setRuler(next);
+      showRuler(next);
+    },
+    [showRuler],
+  );
+  const toggleRuler = () => {
+    const el = scrollRef.current;
+    const r = rulerRef.current;
+    if (r) {
+      const next = { ...r, visible: !r.visible };
+      setRuler(next);
+      if (next.visible) showRuler(next);
+      return;
+    }
+    if (!el) return;
+    // 初めて使うとき：画面の中ほどにある段に置く
+    const a = anchorAt(layoutRef.current, el.scrollLeft, el.scrollTop, el.clientWidth / 2, el.clientHeight * 0.45);
+    setRuler(newRuler(a.page + 1, Math.min(0.95, Math.max(0.05, a.fy))));
+  };
+
+  // 連動している段数カウンターが増減したら、同じ段数だけ定規を動かす
+  const counterValues = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (!counters) return;
+    const linked = rulerRef.current?.counterId;
+    for (const c of counters) {
+      const prev = counterValues.current.get(c.id);
+      counterValues.current.set(c.id, c.value);
+      if (prev !== undefined && c.id === linked && c.value !== prev && rulerRef.current?.visible) moveRuler(c.value - prev);
+    }
+  }, [counters, moveRuler]);
+
   const goToPage = (i: number) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -321,6 +384,9 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
         <button type="button" className={`bar-btn ${panel === "notes" ? "on" : ""}`} onClick={() => setPanel(panel === "notes" ? null : "notes")}>
           メモ
         </button>
+        <button type="button" className={`bar-btn ${ruler?.visible ? "on" : ""}`} aria-pressed={!!ruler?.visible} onClick={toggleRuler}>
+          定規
+        </button>
         <button
           type="button"
           className={`bar-btn ${editMode ? "on" : ""}`}
@@ -362,11 +428,46 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
                     isGesturing={isGesturing}
                   />
                 )}
+                {ruler?.visible && ruler.page === i + 1 && (
+                  <RulerOverlay ruler={ruler} draggable={!editMode} onMove={setRuler} onMoveEnd={setRuler} />
+                )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {ruler?.visible && !editMode && (
+        <div className="ruler-toolbar" role="toolbar" aria-label="定規">
+          <button type="button" className="tool-btn ruler-step" onClick={() => moveRuler(-1)}>
+            ↓ 前の段
+          </button>
+          <button type="button" className="tool-btn ruler-step primary" onClick={() => moveRuler(1)}>
+            ↑ 次の段
+          </button>
+          <button type="button" className="tool-btn" aria-label="帯を細くする" onClick={() => setRuler((r) => r && resizeRuler(r, 1 / 1.2))}>
+            細く
+          </button>
+          <button type="button" className="tool-btn" aria-label="帯を太くする" onClick={() => setRuler((r) => r && resizeRuler(r, 1.2))}>
+            太く
+          </button>
+          {counters && counters.length > 0 && (
+            <select
+              className="ruler-link"
+              aria-label="連動する段数カウンター"
+              value={ruler.counterId ?? ""}
+              onChange={(e) => setRuler((r) => r && { ...r, counterId: e.target.value || undefined })}
+            >
+              <option value="">カウンター連動なし</option>
+              {counters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}と連動
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       {editMode && (
         <div className="annot-toolbar" role="toolbar" aria-label="書き込みツール">
