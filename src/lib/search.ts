@@ -1,5 +1,6 @@
 // 端末内で完結する検索・絞り込み・並べ替え（ネットワーク通信なし）
-import type { Category, FileKind, Pattern, PatternFile, PatternStatus } from "../db/types";
+import type { Category, FileKind, Pattern, PatternFile, PatternStatus, ItemType } from "../db/types";
+import { itemTypeOf } from "../db/types";
 
 export type SortKey = "createdAt" | "updatedAt" | "title" | "lastOpenedAt";
 
@@ -18,6 +19,8 @@ export interface LibraryQuery {
   hasPdf?: boolean;
   categoryId?: string;
   fileKind?: FileKind;
+  /** 種類（未指定＝すべて） */
+  itemType?: ItemType;
   sort: SortKey;
   desc: boolean;
 }
@@ -60,6 +63,7 @@ export function searchPatterns(
     if (q.hasPdf !== undefined && pf.some((f) => f.mimeType === "application/pdf") !== q.hasPdf) return false;
     if (q.categoryId && !p.categoryIds.includes(q.categoryId)) return false;
     if (q.fileKind && !pf.some((f) => f.kind === q.fileKind)) return false;
+    if (q.itemType && itemTypeOf(p) !== q.itemType) return false;
     if (terms.length) {
       const haystack = normalizeForSearch(
         [
@@ -67,6 +71,9 @@ export function searchPatterns(
           p.designer,
           p.shopName,
           p.notes,
+          p.author,
+          p.publisher,
+          p.isbn,
           ...p.tags,
           ...p.categoryIds.map((id) => catName.get(id) ?? ""),
         ]

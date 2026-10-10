@@ -129,6 +129,14 @@ const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFin
 const optStr = (v: unknown) => (isStr(v) && v.trim() ? v : undefined);
 const optNum = (v: unknown) => (isNum(v) ? v : undefined);
 
+function safeUrl(v: unknown): string | undefined {
+  try {
+    return normalizeUrl(optStr(v));
+  } catch {
+    return undefined; // 不正な URL は取り込まない
+  }
+}
+
 function cleanPattern(r: Record<string, unknown>): Pattern | null {
   if (!isStr(r.id) || !isStr(r.title) || !r.title.trim()) return null;
   let purchaseUrl: string | undefined;
@@ -161,6 +169,13 @@ function cleanPattern(r: Record<string, unknown>): Pattern | null {
     gauge: optStr(r.gauge),
     difficulty: optStr(r.difficulty),
     notes: optStr(r.notes),
+    itemType: r.itemType === "book" || r.itemType === "ebook" ? r.itemType : undefined,
+    author: optStr(r.author),
+    publisher: optStr(r.publisher),
+    isbn: optStr(r.isbn),
+    ebookUrl: safeUrl(r.ebookUrl),
+    sourceBookId: optStr(r.sourceBookId),
+    sourcePage: optStr(r.sourcePage),
   };
 }
 

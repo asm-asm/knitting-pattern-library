@@ -6,6 +6,8 @@ import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNativeApp } from "./native";
 
 export const FREE_PATTERN_LIMIT = 5;
+/** 本・電子書籍は編み図とは別に5冊まで無料 */
+export const FREE_BOOK_LIMIT = 5;
 export const PREMIUM_PRODUCT_ID = "com.sammy.knittinglibrary.premiumplan.monthly";
 export const TERMS_URL = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
 export const PRIVACY_URL = "https://asm-asm.github.io/knitting-library-support/privacy.html";
@@ -39,6 +41,18 @@ const Store = registerPlugin<StorePlugin>("Store");
 /** 作品をもう1件登録できるか */
 export function canAddPattern(patternCount: number, premium: boolean): boolean {
   return premium || patternCount < FREE_PATTERN_LIMIT;
+}
+
+/** 本・電子書籍をもう1冊登録できるか */
+export function canAddBook(bookCount: number, premium: boolean): boolean {
+  return premium || bookCount < FREE_BOOK_LIMIT;
+}
+
+/** 種類ごとの登録数（本・電子書籍はまとめて数える） */
+export function countByKind(items: { itemType?: string }[]): { patterns: number; books: number } {
+  let books = 0;
+  for (const p of items) if (p.itemType === "book" || p.itemType === "ebook") books++;
+  return { patterns: items.length - books, books };
 }
 
 export function isPremiumActive(entitlements: Entitlement[], now = Date.now()): boolean {

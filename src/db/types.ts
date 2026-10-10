@@ -13,6 +13,23 @@ export const STATUS_LABELS: Record<PatternStatus, string> = {
   done: "完成",
 };
 
+/** 登録するものの種類。未設定（以前のデータ）は編み図として扱う。 */
+export type ItemType = "pattern" | "book" | "ebook";
+
+export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
+  pattern: "編み図",
+  book: "本",
+  ebook: "電子書籍",
+};
+
+export function itemTypeOf(p: Pick<Pattern, "itemType">): ItemType {
+  return p.itemType ?? "pattern";
+}
+
+export function isBookType(t: ItemType | undefined): boolean {
+  return t === "book" || t === "ebook";
+}
+
 export type FileKind = "original" | "translation" | "revised" | "chart" | "supplement" | "other";
 
 export const FILE_KIND_ORDER: FileKind[] = ["original", "translation", "revised", "chart", "supplement", "other"];
@@ -53,6 +70,19 @@ export interface Pattern {
   gauge?: string;
   difficulty?: string;
   notes?: string;
+  /** 種類（未設定＝編み図） */
+  itemType?: ItemType;
+  // ---- 本・電子書籍 ----
+  author?: string;
+  publisher?: string;
+  /** ISBN-13（数字のみ） */
+  isbn?: string;
+  /** 電子書籍を開くリンク（Kindle などのストア・アプリ） */
+  ebookUrl?: string;
+  // ---- 編み図：掲載している本 ----
+  sourceBookId?: string;
+  /** 掲載ページ（例：「24」「p.24-27」） */
+  sourcePage?: string;
 }
 
 /** PDF 内の閲覧位置。ファイルごとに独立して保存する。 */

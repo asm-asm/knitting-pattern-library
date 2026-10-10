@@ -2,6 +2,7 @@
 import { db as defaultDb, type LibraryDB } from "./db";
 import type { Annotation, Category, FileKind, Pattern, PatternFile, PatternStatus, ViewState } from "./types";
 import { newId } from "../lib/id";
+import { normalizeIsbn } from "../lib/isbn";
 import { blobStoreFor } from "../storage/blobStore";
 
 /** ファイル実体を先に保存し、記録の保存に失敗したら実体を片付ける */
@@ -109,6 +110,12 @@ function cleanPatternInput<T extends Partial<PatternInput>>(input: T): T {
     out.title = title;
   }
   if ("purchaseUrl" in input) out.purchaseUrl = normalizeUrl(input.purchaseUrl);
+  if ("ebookUrl" in input) out.ebookUrl = normalizeUrl(input.ebookUrl);
+  if ("isbn" in input && input.isbn) {
+    const isbn = normalizeIsbn(input.isbn);
+    if (!isbn) throw new UserFacingError("ISBN の番号が正しくありません。本の裏にある「978」または「979」から始まる13桁の番号を確認してください。");
+    out.isbn = isbn;
+  }
   if (input.tags) out.tags = normalizeTags(input.tags);
   if ("price" in input && input.price !== undefined && (!Number.isFinite(input.price) || input.price < 0)) {
     throw new UserFacingError("購入価格は0以上の数値で入力してください。");
