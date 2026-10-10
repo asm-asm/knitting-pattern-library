@@ -30,15 +30,26 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
   const premium = usePremium();
   const { toast, showError } = useFeedback();
   const [product, setProduct] = useState<StoreProduct | null>();
+  // 商品を読み込めなかった理由：network＝通信の失敗、unavailable＝App Store から商品が返ってこない
+  const [loadError, setLoadError] = useState<"network" | "unavailable">();
   const [busy, setBusy] = useState<"buy" | "restore" | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setProduct(undefined);
+    setLoadError(undefined);
     loadPremiumProduct()
-      .then((p) => !cancelled && setProduct(p ?? null))
-      .catch(() => !cancelled && setProduct(null));
+      .then((p) => {
+        if (cancelled) return;
+        setProduct(p ?? null);
+        if (!p) setLoadError("unavailable");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProduct(null);
+        setLoadError("network");
+      });
     return () => {
       cancelled = true;
     };
@@ -86,7 +97,11 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
 
       {product === null && (
         <div className="note-box">
-          <p>購入情報を読み込めませんでした。インターネットに接続しているか確認してください。</p>
+          <p>
+            {loadError === "unavailable"
+              ? "現在、プレミアムをご購入いただけない状態です。しばらくしてからもう一度お試しください。"
+              : "購入情報を読み込めませんでした。インターネットに接続しているか確認してください。"}
+          </p>
           <button type="button" className="btn btn-small" onClick={() => setReload((n) => n + 1)}>
             もう一度読み込む
           </button>
