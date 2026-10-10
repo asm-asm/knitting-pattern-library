@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPattern, type ImageInput } from "../db/repo";
 import { FileSelection, type PendingFile } from "../components/Inputs";
@@ -6,12 +6,19 @@ import { useFeedback } from "../components/Feedback";
 import { prepareFiles, readImage, requestPersistentStorage } from "../lib/importFiles";
 import { stripExtension } from "../lib/format";
 import { Field, PatternFields, emptyValues, valuesToInput } from "./PatternForm";
+import { clearHandoff, peekHandoff } from "./Import";
 
 export default function NewPattern() {
   const navigate = useNavigate();
   const { toast, showError } = useFeedback();
-  const [values, setValues] = useState(emptyValues);
-  const [files, setFiles] = useState<PendingFile[]>([]);
+  // 共有メニューから受け取ったファイルがあれば引き継ぐ
+  const [files, setFiles] = useState<PendingFile[]>(peekHandoff);
+  const [values, setValues] = useState(() => {
+    const v = emptyValues();
+    const first = peekHandoff()[0];
+    return first ? { ...v, title: stripExtension(first.file.name) } : v;
+  });
+  useEffect(() => clearHandoff(), []);
   const [coverFile, setCoverFile] = useState<File>();
   const [pdfCover, setPdfCover] = useState(true);
   const [busy, setBusy] = useState(false);

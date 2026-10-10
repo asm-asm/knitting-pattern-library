@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect } from "react";
-import { HashRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { FeedbackProvider } from "./components/Feedback";
+import { lazy, Suspense, useEffect, useRef } from "react";
+import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { FeedbackProvider, useFeedback } from "./components/Feedback";
 import { EmptyState } from "./components/PatternParts";
 import { useOnline } from "./hooks/hooks";
 import { ensureDefaultCategories } from "./db/repo";
@@ -10,6 +10,8 @@ import NewPattern from "./pages/NewPattern";
 import EditPattern from "./pages/EditPattern";
 import PatternDetail from "./pages/PatternDetail";
 import Settings from "./pages/Settings";
+import Import from "./pages/Import";
+import { startIncomingFileListener } from "./lib/native";
 
 // ビューアは pdf.js を含み大きいので遅延読み込み
 const Viewer = lazy(() => import("./pages/Viewer"));
@@ -31,6 +33,28 @@ export default function App() {
 function Shell() {
   const location = useLocation();
   const online = useOnline();
+  const navigate = useNavigate();
+  const { toast } = useFeedback();
+
+  const navRef = useRef(navigate);
+  navRef.current = navigate;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  // iOS アプリ：共有メニュー・「ファイル」アプリから PDF を受け取る（ブラウザ版では何もしない）
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let disposed = false;
+    startIncomingFileListener(
+      () => navRef.current("/import"),
+      () => toastRef.current("ファイルを受け取れませんでした。もう一度共有してください。", "error"),
+    ).then((s) => (disposed ? s() : (stop = s)));
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, []);
+
   const inViewer = /^\/patterns\/[^/]+\/files\//.test(location.pathname);
 
   useEffect(() => {
@@ -50,6 +74,7 @@ function Shell() {
             <Route path="/patterns/:id/edit" element={<EditPattern />} />
             <Route path="/patterns/:id/files/:fileId" element={<Viewer />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/import" element={<Import />} />
             <Route path="*" element={<EmptyState title="ページが見つかりません" />} />
           </Routes>
         </Suspense>

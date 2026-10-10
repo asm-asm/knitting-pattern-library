@@ -3,6 +3,7 @@ import { useFeedback } from "./Feedback";
 import { backupFileName, createBackup, parseBackup, restoreBackup, wipeAllData, type ParsedBackup, type RestoreMode } from "../lib/backup";
 import { formatBytes, formatDateTime } from "../lib/format";
 import { usePersistentState } from "../hooks/hooks";
+import { isNativeApp, shareFileNative } from "../lib/native";
 
 /**
  * 作成したファイルを端末に保存する。
@@ -10,6 +11,8 @@ import { usePersistentState } from "../hooks/hooks";
  * 共有シートはタップ直後でないと開けないため、作成とは別のボタン操作から呼ぶ。
  */
 async function saveFile(blob: Blob, filename: string): Promise<"shared" | "downloaded" | "cancelled"> {
+  // iOS アプリ：WebView ではダウンロードできないため、ネイティブの共有シートを使う
+  if (isNativeApp()) return shareFileNative(blob, filename);
   const file = new File([blob], filename, { type: blob.type });
   const touch = navigator.maxTouchPoints > 0;
   if (touch && navigator.canShare?.({ files: [file] })) {
@@ -111,7 +114,13 @@ export function BackupSettings() {
               type="button"
               className="btn btn-primary"
               onClick={async () => {
-                const r = await saveFile(ready.blob, ready.filename);
+                let r: Awaited<ReturnType<typeof saveFile>>;
+                try {
+                  r = await saveFile(ready.blob, ready.filename);
+                } catch (e) {
+                  showError(e, "ファイルを保存できませんでした。端末の空き容量を確認して、もう一度お試しください。");
+                  return;
+                }
                 if (r === "cancelled") return;
                 if (ready.includeFiles) setLastBackup(Date.now());
                 setReady(null);

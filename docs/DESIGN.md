@@ -21,18 +21,19 @@
 
 外部 API・広告 SDK・解析 SDK は一切使用していない。外部通信は「購入先URLを開く」操作のみ。
 
-### iOS アプリとしての配信方法（予定）
-- Capacitor で Web アプリを iOS アプリに包む（**未導入**。Phase 5 で macOS 上で実施）。
+### iOS アプリとしての配信方法
+- Capacitor 8 で Web アプリを iOS アプリに包む（`ios/` に Xcode プロジェクトを生成済み。CocoaPods 不要の Swift Package Manager 構成）。
+- Mac がないため、GitHub Actions のクラウド Mac でビルドし TestFlight へアップロードする（手順は [IOS_RELEASE.md](IOS_RELEASE.md)）。
 - アプリ本体は端末に同梱されるため、iOS アプリでは Service Worker を使わずにオフライン動作する（`main.tsx` でネイティブ時は登録しない）。
 
 ### ブラウザ版と iOS 版の差分
 
 | 機能 | ブラウザ（PWA） | iOS アプリ（Capacitor・予定） |
 |---|---|---|
-| オフライン起動 | Service Worker で対応済み | アプリ同梱で対応（予定） |
-| PDF を共有メニューから受け取る | **非対応**（iOS Safari は Web Share Target 非対応） | Share Extension の追加が必要（**未実装**） |
+| オフライン起動 | Service Worker で対応済み | アプリ同梱で対応 |
+| PDF を共有メニューから受け取る | **非対応**（iOS Safari は Web Share Target 非対応） | 実装済み（PDF・画像の書類タイプを登録。受け取り後に新規作品／既存作品への追加を選択）。**実機未確認** |
 | PDF をファイルから選択 | 対応済み | 対応（WebView の file input） |
-| バックアップの保存 | ダウンロード、またはタッチ端末では共有シート | Filesystem / Share プラグインへの置き換えが望ましい（**未実装**） |
+| バックアップの保存 | ダウンロード、またはタッチ端末では共有シート | Filesystem・Share プラグインで共有シートを開く（実装済み・**実機未確認**） |
 | データの自動削除リスク | Safari（ホーム画面に追加していない場合）は**7日間アクセスがないとデータが削除されうる** | WebView の IndexedDB は容量逼迫時に削除されうる（下記リスク参照） |
 | 画面の消灯防止 | Wake Lock API（Safari 16.4+） | 同左（必要ならプラグイン） |
 
@@ -58,9 +59,8 @@
 
 ### 未実装・未確認
 - **iOS 実機での確認**（macOS が必要）。特にピンチ操作・Apple Pencil・共有シートは実機での確認が必要。
-- 共有メニューからの PDF 受け取り（iOS Share Extension）
 - URL からのタイトル・画像の自動取得（CORS とサイト利用規約の問題があるため、URL 末尾からのタイトル候補提示のみ）
-- Phase 5 全般（Capacitor 導入、アイコン PNG、スクリーンショット、説明文、プライバシーポリシー、App Store 申告）
+- Phase 5 の残り（スクリーンショット、説明文、プライバシーポリシー、App Store 申告）。Capacitor 導入・アイコン・起動画面・クラウドビルド設定は作成済みだが、クラウドビルドは未実行
 - 課金（方針どおり未着手）
 
 ## 4. リスクと対策

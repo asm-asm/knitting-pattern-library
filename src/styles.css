@@ -402,3 +402,8 @@ details.form-section[open] > summary { margin-bottom: 16px; }
 .link-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); }
 .link-card-title { font-weight: 700; margin: 0; }
 .link-card .hint { margin: 2px 0 0; }
+
+/* ファイル受け取り */
+button.row { width: 100%; border: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.import-targets { margin-top: 10px; }
+.import .btn-block { margin-bottom: 8px; }
