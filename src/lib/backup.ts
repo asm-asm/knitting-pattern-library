@@ -17,9 +17,9 @@ import {
   type Counter,
   type Pattern,
   type PatternFile,
-  type StoredBlob,
 } from "../db/types";
 import { newId } from "./id";
+import { blobStoreFor } from "../storage/blobStore";
 
 export const BACKUP_FORMAT = "knitting-pattern-library-backup";
 export const BACKUP_VERSION = 1;
@@ -48,7 +48,7 @@ export interface ParsedBackup {
   invalid: number;
 }
 
-async function readAll(db: LibraryDB): Promise<BackupData> {
+export async function readAllData(db: LibraryDB): Promise<BackupData> {
   return db.transaction("r", [db.patterns, db.files, db.categories, db.counters, db.annotations], async () => ({
     patterns: await db.patterns.toArray(),
     files: await db.files.toArray(),
@@ -81,7 +81,7 @@ export function backupFileName(includeFiles: boolean, now = new Date()) {
 }
 
 export async function createBackup(opts: { includeFiles: boolean }, db: LibraryDB = defaultDb): Promise<Blob> {
-  const data = await readAll(db);
+  const data = await readAllData(db);
   if (!opts.includeFiles) {
     const json = JSON.stringify({ manifest: manifestFor(data, false), data });
     return new Blob([json], { type: "application/json" });
@@ -108,12 +108,12 @@ export async function createBackup(opts: { includeFiles: boolean }, db: LibraryD
   for (const p of data.patterns) if (p.coverBlobId) blobIds.add(p.coverBlobId);
   const blobTypes: Record<string, string> = {};
   for (const id of blobIds) {
-    const b = await db.blobs.get(id);
+    const b = await blobStoreFor(db).get(id);
     if (!b) continue;
     blobTypes[id] = b.type;
     const entry = new ZipPassThrough(`blobs/${id}`);
     zip.add(entry);
-    entry.push(new Uint8Array(b.data), true);
+    entry.push(new Uint8Array(await b.arrayBuffer()), true);
   }
   addText("manifest.json", JSON.stringify(manifestFor(data, true), null, 2));
   addText("data.json", JSON.stringify({ ...data, blobTypes }));
@@ -272,6 +272,12 @@ export async function parseBackup(input: Blob): Promise<ParsedBackup> {
     throw new UserFacingError("新しいバージョンのアプリで作成されたバックアップです。アプリを最新版に更新してから復元してください。");
   }
 
+  const { data, invalid } = cleanBackupData(dataRaw);
+  return { manifest: m as BackupManifest, data, blobs, invalid };
+}
+
+/** 読み込んだデータを検証し、不正なレコードを取り除く（バックアップ・自動控えの共通処理） */
+export function cleanBackupData(dataRaw: Record<string, unknown>): { data: BackupData; invalid: number } {
   const counter = { invalid: 0 };
   const data: BackupData = {
     patterns: cleanList(dataRaw.patterns, cleanPattern, counter),
@@ -280,7 +286,7 @@ export async function parseBackup(input: Blob): Promise<ParsedBackup> {
     counters: cleanList(dataRaw.counters, cleanCounter, counter),
     annotations: cleanList(dataRaw.annotations, cleanAnnotation, counter),
   };
-  return { manifest: m as BackupManifest, data, blobs, invalid: counter.invalid };
+  return { data, invalid: counter.invalid };
 }
 
 // ---- 復元 ----
@@ -304,78 +310,105 @@ export interface RestoreResult {
 export async function restoreBackup(parsed: ParsedBackup, mode: RestoreMode, db: LibraryDB = defaultDb): Promise<RestoreResult> {
   const { data, blobs } = parsed;
   const result: RestoreResult = { patterns: 0, skipped: 0, files: 0, missingFiles: 0 };
+  const store = blobStoreFor(db);
 
-  await db.transaction("rw", [db.patterns, db.files, db.blobs, db.categories, db.counters, db.annotations], async () => {
-    if (mode === "replace") {
-      await Promise.all([db.patterns.clear(), db.files.clear(), db.blobs.clear(), db.categories.clear(), db.counters.clear(), db.annotations.clear()]);
-    }
+  // 1. 取り込む作品を決める（追加モードでは端末にない作品だけ）
+  const existing = new Set((await db.patterns.toCollection().primaryKeys()) as string[]);
+  const targets = mode === "replace" ? data.patterns : data.patterns.filter((p) => !existing.has(p.id));
+  result.skipped = data.patterns.length - targets.length;
+  // 置き換えモードで、復元が終わったら削除する現在のファイル実体
+  const oldBlobIds =
+    mode === "replace"
+      ? [...(await db.files.toArray()).map((f) => f.blobId), ...(await db.patterns.toArray()).map((p) => p.coverBlobId)].filter(
+          (x): x is string => !!x,
+        )
+      : [];
 
-    const putBlob = async (blobId: string): Promise<string | undefined> => {
-      const b = blobs.get(blobId);
-      if (!b) return undefined;
-      const id = (await db.blobs.get(blobId)) ? newId() : blobId;
+  // 2. ファイル実体を先に保存する（既存の実体と ID が重なる場合は新しい ID にする）
+  const blobIdMap = new Map<string, string>();
+  const written: string[] = [];
+  const needed = new Set<string>();
+  for (const p of targets) {
+    if (p.coverBlobId) needed.add(p.coverBlobId);
+    for (const f of data.files) if (f.patternId === p.id) needed.add(f.blobId);
+  }
+  try {
+    for (const id of needed) {
+      const b = blobs.get(id);
+      if (!b) continue;
+      const newBlobId = (await store.has(id)) ? newId() : id;
       // zip 内の領域を参照している可能性があるのでコピーして保存する
-      const record: StoredBlob = { id, type: b.type, data: b.data.slice().buffer as ArrayBuffer };
-      await db.blobs.add(record);
-      return id;
-    };
-    const freeId = async (table: { get: (id: string) => Promise<unknown> }, id: string) => ((await table.get(id)) ? newId() : id);
-
-    // カテゴリ：同じ ID または同じ名前があればそれを使う
-    const localCats = await db.categories.toArray();
-    let nextOrder = localCats.reduce((m, c) => Math.max(m, c.order), -1) + 1;
-    const catMap = new Map<string, string>();
-    for (const c of [...data.categories].sort((a, b) => a.order - b.order)) {
-      const same = localCats.find((l) => l.id === c.id) ?? localCats.find((l) => l.name === c.name);
-      if (same) {
-        catMap.set(c.id, same.id);
-        continue;
-      }
-      const rec = { ...c, order: nextOrder++ };
-      await db.categories.add(rec);
-      localCats.push(rec);
-      catMap.set(c.id, c.id);
+      await store.put(newBlobId, b.data.slice().buffer as ArrayBuffer, b.type);
+      written.push(newBlobId);
+      blobIdMap.set(id, newBlobId);
     }
 
-    for (const p of data.patterns) {
-      if (await db.patterns.get(p.id)) {
-        result.skipped++;
-        continue;
+    // 3. 記録をまとめて保存する
+    await db.transaction("rw", [db.patterns, db.files, db.categories, db.counters, db.annotations], async () => {
+      if (mode === "replace") {
+        await Promise.all([db.patterns.clear(), db.files.clear(), db.categories.clear(), db.counters.clear(), db.annotations.clear()]);
       }
-      const coverBlobId = p.coverBlobId ? await putBlob(p.coverBlobId) : undefined;
-      const fileIdMap = new Map<string, string>();
-      for (const f of data.files.filter((x) => x.patternId === p.id)) {
-        const blobId = await putBlob(f.blobId);
-        if (!blobId) {
-          result.missingFiles++;
+      const freeId = async (table: { get: (id: string) => Promise<unknown> }, id: string) => ((await table.get(id)) ? newId() : id);
+
+      // カテゴリ：同じ ID または同じ名前があればそれを使う
+      const localCats = await db.categories.toArray();
+      let nextOrder = localCats.reduce((m, c) => Math.max(m, c.order), -1) + 1;
+      const catMap = new Map<string, string>();
+      for (const c of [...data.categories].sort((a, b) => a.order - b.order)) {
+        const same = localCats.find((l) => l.id === c.id) ?? localCats.find((l) => l.name === c.name);
+        if (same) {
+          catMap.set(c.id, same.id);
           continue;
         }
-        const id = await freeId(db.files, f.id);
-        fileIdMap.set(f.id, id);
-        await db.files.add({ ...f, id, blobId });
-        result.files++;
+        const rec = { ...c, order: nextOrder++ };
+        await db.categories.add(rec);
+        localCats.push(rec);
+        catMap.set(c.id, c.id);
       }
-      for (const c of data.counters.filter((x) => x.patternId === p.id)) {
-        await db.counters.add({ ...c, id: await freeId(db.counters, c.id) });
+
+      for (const p of targets) {
+        const fileIdMap = new Map<string, string>();
+        for (const f of data.files.filter((x) => x.patternId === p.id)) {
+          const blobId = blobIdMap.get(f.blobId);
+          if (!blobId) {
+            result.missingFiles++;
+            continue;
+          }
+          const id = await freeId(db.files, f.id);
+          fileIdMap.set(f.id, id);
+          await db.files.add({ ...f, id, blobId });
+          result.files++;
+        }
+        for (const c of data.counters.filter((x) => x.patternId === p.id)) {
+          await db.counters.add({ ...c, id: await freeId(db.counters, c.id) });
+        }
+        for (const a of data.annotations) {
+          const fileId = fileIdMap.get(a.fileId);
+          if (fileId) await db.annotations.add({ ...a, id: await freeId(db.annotations, a.id), fileId });
+        }
+        await db.patterns.add({
+          ...p,
+          coverBlobId: p.coverBlobId ? blobIdMap.get(p.coverBlobId) : undefined,
+          categoryIds: [...new Set(p.categoryIds.map((id) => catMap.get(id)).filter((x): x is string => !!x))],
+        });
+        result.patterns++;
       }
-      for (const a of data.annotations) {
-        const fileId = fileIdMap.get(a.fileId);
-        if (fileId) await db.annotations.add({ ...a, id: await freeId(db.annotations, a.id), fileId });
-      }
-      await db.patterns.add({
-        ...p,
-        coverBlobId,
-        categoryIds: [...new Set(p.categoryIds.map((id) => catMap.get(id)).filter((x): x is string => !!x))],
-      });
-      result.patterns++;
-    }
-  });
+    });
+  } catch (e) {
+    // 途中で失敗したら、今回書き込んだ実体を片付ける（端末内の既存データはそのまま）
+    await store.delete(written).catch(() => undefined);
+    throw e;
+  }
+
+  // 4. 置き換えた古い実体を削除する
+  if (oldBlobIds.length) await store.delete(oldBlobIds).catch(() => undefined);
   return result;
 }
 
 /** 端末内のすべてのデータを削除する */
 export async function wipeAllData(db: LibraryDB = defaultDb) {
-  await db.transaction("rw", [db.patterns, db.files, db.blobs, db.categories, db.counters, db.annotations], async () => {
-    await Promise.all([db.patterns.clear(), db.files.clear(), db.blobs.clear(), db.categories.clear(), db.counters.clear(), db.annotations.clear()]);
+  await db.transaction("rw", [db.patterns, db.files, db.categories, db.counters, db.annotations], async () => {
+    await Promise.all([db.patterns.clear(), db.files.clear(), db.categories.clear(), db.counters.clear(), db.annotations.clear()]);
   });
+  await blobStoreFor(db).clear();
 }

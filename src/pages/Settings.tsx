@@ -8,6 +8,9 @@ import { formatBytes } from "../lib/format";
 import { requestPersistentStorage } from "../lib/importFiles";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
 import { BackupSettings } from "../components/BackupSettings";
+import { isNativeApp } from "../lib/native";
+import { snapshotLastSavedAt } from "../storage/init";
+import { formatDateTime } from "../lib/format";
 import { ExternalLinkButton } from "../components/Inputs";
 
 const RAVELRY_JA_SEARCH_URL = "https://ravely-one.vercel.app/";
@@ -183,6 +186,10 @@ function StorageSettings() {
   const [estimate, setEstimate] = useState<StorageEstimate>();
   const [persisted, setPersisted] = useState<boolean>();
   const counts = useLiveQuery(async () => ({ patterns: await db.patterns.count(), files: await db.files.count() }), []);
+  // iOS アプリ：移行待ちのファイル（以前の保存場所に残っている件数）
+  const pendingMigration = useLiveQuery(() => db.blobs.count(), []);
+  const native = isNativeApp();
+  const lastSnapshot = snapshotLastSavedAt();
   const fileBytes = useLiveQuery(async () => {
     let total = 0;
     await db.files.each((f) => (total += f.size));
@@ -217,12 +224,28 @@ function StorageSettings() {
             </dd>
           </div>
         )}
-        <div>
-          <dt>保存の永続化</dt>
-          <dd>{persisted === undefined ? "この環境では確認できません" : persisted ? "有効" : "未許可"}</dd>
-        </div>
+        {native ? (
+          <>
+            <div>
+              <dt>PDFの保存場所</dt>
+              <dd>
+                アプリ専用フォルダ（iCloud バックアップの対象）
+                {pendingMigration ? `・移行中 残り${pendingMigration}件` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt>自動の控え</dt>
+              <dd>{lastSnapshot ? `${formatDateTime(lastSnapshot)} に保存` : "準備中"}</dd>
+            </div>
+          </>
+        ) : (
+          <div>
+            <dt>保存の永続化</dt>
+            <dd>{persisted === undefined ? "この環境では確認できません" : persisted ? "有効" : "未許可"}</dd>
+          </div>
+        )}
       </dl>
-      {persisted === false && (
+      {!native && persisted === false && (
         <>
           <p className="hint">
             ブラウザで利用している場合、空き容量が少なくなるとブラウザがデータを削除することがあります。永続化を有効にすると、その可能性を減らせます（ブラウザが許可しない場合もあります）。

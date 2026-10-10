@@ -2,6 +2,29 @@
 import { db as defaultDb, type LibraryDB } from "./db";
 import type { Annotation, Category, FileKind, Pattern, PatternFile, PatternStatus, ViewState } from "./types";
 import { newId } from "../lib/id";
+import { blobStoreFor } from "../storage/blobStore";
+
+/** ファイル実体を先に保存し、記録の保存に失敗したら実体を片付ける */
+async function withBlobs<T>(db: LibraryDB, blobs: { id: string; type: string; data: ArrayBuffer }[], save: () => Promise<T>): Promise<T> {
+  const store = blobStoreFor(db);
+  const written: string[] = [];
+  try {
+    for (const b of blobs) {
+      await store.put(b.id, b.data, b.type);
+      written.push(b.id);
+    }
+    return await save();
+  } catch (e) {
+    await store.delete(written).catch(() => undefined);
+    throw e;
+  }
+}
+
+/** 記録の削除が確定してから、ファイル実体を削除する */
+async function deleteBlobsAfter(db: LibraryDB, ids: (string | undefined)[]) {
+  const list = ids.filter((x): x is string => !!x);
+  if (list.length) await blobStoreFor(db).delete(list).catch((e) => console.warn("blob delete failed", e));
+}
 
 /** 利用者にそのまま表示してよい日本語メッセージを持つエラー */
 export class UserFacingError extends Error {}
@@ -125,14 +148,13 @@ export async function createPattern(
   const coverBlob = cover ? { id: newId(), type: cover.type, data: cover.data } : undefined;
   const pattern: Pattern = { ...data, id, createdAt: now, updatedAt: now, coverBlobId: coverBlob?.id };
 
-  await db.transaction("rw", [db.patterns, db.files, db.blobs], async () => {
-    await db.patterns.add(pattern);
-    for (const r of records) {
-      await db.blobs.add(r.blob);
-      await db.files.add(r.file);
-    }
-    if (coverBlob) await db.blobs.add(coverBlob);
-  });
+  const blobs = [...records.map((r) => r.blob), ...(coverBlob ? [coverBlob] : [])];
+  await withBlobs(db, blobs, () =>
+    db.transaction("rw", [db.patterns, db.files], async () => {
+      await db.patterns.add(pattern);
+      await db.files.bulkAdd(records.map((r) => r.file));
+    }),
+  );
   return id;
 }
 
@@ -158,17 +180,16 @@ export async function markPatternOpened(id: string, db: LibraryDB = defaultDb) {
 
 /** 表紙画像を差し替える。null で削除。古い画像の実体も削除する。 */
 export async function setPatternCover(id: string, cover: ImageInput | null, db: LibraryDB = defaultDb) {
-  await db.transaction("rw", [db.patterns, db.blobs], async () => {
-    const p = await db.patterns.get(id);
-    if (!p) throw new UserFacingError("作品が見つかりません。");
-    if (p.coverBlobId) await db.blobs.delete(p.coverBlobId);
-    let coverBlobId: string | undefined;
-    if (cover) {
-      coverBlobId = newId();
-      await db.blobs.add({ id: coverBlobId, type: cover.type, data: cover.data });
-    }
-    await db.patterns.update(id, { coverBlobId, updatedAt: Date.now() });
-  });
+  const coverBlobId = cover ? newId() : undefined;
+  const old = await withBlobs(db, cover && coverBlobId ? [{ id: coverBlobId, ...cover }] : [], () =>
+    db.transaction("rw", db.patterns, async () => {
+      const p = await db.patterns.get(id);
+      if (!p) throw new UserFacingError("作品が見つかりません。");
+      await db.patterns.update(id, { coverBlobId, updatedAt: Date.now() });
+      return p.coverBlobId;
+    }),
+  );
+  await deleteBlobsAfter(db, [old]);
 }
 
 export interface DeletionSummary {
@@ -188,31 +209,33 @@ export async function getPatternDeletionSummary(id: string, db: LibraryDB = defa
 
 /** 作品と、その作品に属するファイル実体・カウンター・注釈をまとめて削除する。他の作品のデータには触れない。 */
 export async function deletePattern(id: string, db: LibraryDB = defaultDb) {
-  await db.transaction("rw", [db.patterns, db.files, db.blobs, db.counters, db.annotations], async () => {
+  const blobIds = await db.transaction("rw", [db.patterns, db.files, db.counters, db.annotations], async () => {
     const p = await db.patterns.get(id);
-    if (!p) return;
+    if (!p) return [];
     const files = await db.files.where("patternId").equals(id).toArray();
     const fileIds = files.map((f) => f.id);
     if (fileIds.length) await db.annotations.where("fileId").anyOf(fileIds).delete();
-    await db.blobs.bulkDelete(files.map((f) => f.blobId));
     await db.files.bulkDelete(fileIds);
     await db.counters.where("patternId").equals(id).delete();
-    if (p.coverBlobId) await db.blobs.delete(p.coverBlobId);
     await db.patterns.delete(id);
+    return [...files.map((f) => f.blobId), p.coverBlobId];
   });
+  await deleteBlobsAfter(db, blobIds);
 }
 
 export async function addFilesToPattern(patternId: string, files: NewFileInput[], db: LibraryDB = defaultDb) {
   const now = Date.now();
   const records = buildFileRecords(patternId, files, now);
-  await db.transaction("rw", [db.patterns, db.files, db.blobs], async () => {
-    if (!(await db.patterns.get(patternId))) throw new UserFacingError("作品が見つかりません。");
-    for (const r of records) {
-      await db.blobs.add(r.blob);
-      await db.files.add(r.file);
-    }
-    await db.patterns.update(patternId, { updatedAt: now });
-  });
+  await withBlobs(
+    db,
+    records.map((r) => r.blob),
+    () =>
+      db.transaction("rw", [db.patterns, db.files], async () => {
+        if (!(await db.patterns.get(patternId))) throw new UserFacingError("作品が見つかりません。");
+        await db.files.bulkAdd(records.map((r) => r.file));
+        await db.patterns.update(patternId, { updatedAt: now });
+      }),
+  );
   return records.map((r) => r.file.id);
 }
 
@@ -236,14 +259,15 @@ export async function getFileDeletionSummary(fileId: string, db: LibraryDB = def
 
 /** ファイル1件と、その実体・注釈を削除する。 */
 export async function deleteFile(fileId: string, db: LibraryDB = defaultDb) {
-  await db.transaction("rw", [db.patterns, db.files, db.blobs, db.annotations], async () => {
+  const blobId = await db.transaction("rw", [db.patterns, db.files, db.annotations], async () => {
     const f = await db.files.get(fileId);
-    if (!f) return;
+    if (!f) return undefined;
     await db.annotations.where("fileId").equals(fileId).delete();
-    await db.blobs.delete(f.blobId);
     await db.files.delete(fileId);
     await db.patterns.update(f.patternId, { updatedAt: Date.now() });
+    return f.blobId;
   });
+  await deleteBlobsAfter(db, [blobId]);
 }
 
 export async function saveViewState(fileId: string, viewState: ViewState, db: LibraryDB = defaultDb) {
@@ -251,8 +275,7 @@ export async function saveViewState(fileId: string, viewState: ViewState, db: Li
 }
 
 export async function getBlob(blobId: string, db: LibraryDB = defaultDb): Promise<Blob | undefined> {
-  const b = await db.blobs.get(blobId);
-  return b ? new Blob([b.data], { type: b.type }) : undefined;
+  return blobStoreFor(db).get(blobId);
 }
 
 // ---- カテゴリ ----

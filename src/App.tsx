@@ -16,7 +16,7 @@ import { startIncomingFileListener } from "./lib/native";
 // ビューアは pdf.js を含み大きいので遅延読み込み
 const Viewer = lazy(() => import("./pages/Viewer"));
 
-export default function App() {
+export default function App({ recovered }: { recovered?: { patterns: number; files: number } }) {
   useEffect(() => {
     void ensureDefaultCategories();
   }, []);
@@ -24,18 +24,21 @@ export default function App() {
     // iOS アプリ（Capacitor）でもサーバー設定なしで動くよう HashRouter を使う
     <HashRouter>
       <FeedbackProvider>
-        <Shell />
+        <Shell recovered={recovered} />
       </FeedbackProvider>
     </HashRouter>
   );
 }
 
-function Shell() {
+function Shell({ recovered }: { recovered?: { patterns: number; files: number } }) {
   const location = useLocation();
   const online = useOnline();
   const navigate = useNavigate();
   const { toast } = useFeedback();
 
+  useEffect(() => {
+    if (recovered) toast(`保存されていた控えから、作品${recovered.patterns}件のデータを復元しました`);
+  }, [recovered, toast]);
   const navRef = useRef(navigate);
   navRef.current = navigate;
   const toastRef = useRef(toast);
