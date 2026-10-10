@@ -125,7 +125,7 @@ export function Paywall({ reason, patternCount, onClose }: { reason: "limit" | "
           }
         }}
       >
-        {busy === "buy" ? "処理中…" : product ? `${priceLabel} で登録する` : "読み込み中…"}
+        {busy === "buy" ? "処理中…" : product ? `${priceLabel} で登録する` : product === null ? "現在は購入できません" : "読み込み中…"}
       </button>
 
       <button

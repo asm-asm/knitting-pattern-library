@@ -113,7 +113,9 @@ export async function initPremium() {
 
 export async function loadPremiumProduct(): Promise<StoreProduct | undefined> {
   if (import.meta.env.DEV && previewProduct) return previewProduct;
-  const { products } = await Store.getProducts({ productIds: [PREMIUM_PRODUCT_ID] });
+  // App Store から返事がないまま待ち続けないよう、20秒で打ち切る
+  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 20_000));
+  const { products } = await Promise.race([Store.getProducts({ productIds: [PREMIUM_PRODUCT_ID] }), timeout]);
   return products[0];
 }
 
