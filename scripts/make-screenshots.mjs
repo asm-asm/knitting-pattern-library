@@ -2,7 +2,7 @@
 // サンプルの作品データ（store/samples の写真）を実際のアプリに入れて撮影し、見出しを付けて仕上げる。
 //   node scripts/make-screenshots.mjs
 // 出力：store/screenshots/iphone/*.png（1320×2868）、store/screenshots/ipad/*.png（2064×2752）
-// 写真・本の表紙・編み図はすべて見本として作ったもので、実在の作品・書籍ではない。
+// 写真・本の表紙・編み図はすべて見本として用意したもので、実在の作品・書籍ではない。
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -42,25 +42,10 @@ const covers = {
   sweater: await photo("sweater.png"),
 };
 
-// ---------- 本の表紙（見本の架空の本） ----------
-async function bookCover(file, title, sub, publisher, tone) {
-  return renderJpeg(
-    `<div style="width:720px;height:960px;background:${tone};font-family:'Yu Mincho','Hiragino Mincho ProN',serif;position:relative;overflow:hidden">
-      <img src="${dataUrl(file)}" style="position:absolute;left:80px;top:320px;width:560px;height:560px;object-fit:cover;border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.18)">
-      <div style="position:absolute;left:60px;right:60px;top:56px;color:#3b2a20">
-        <div style="font-size:30px;letter-spacing:6px;opacity:.75">${sub}</div>
-        <div style="font-size:68px;font-weight:700;line-height:1.25;margin-top:10px">${title}</div>
-      </div>
-      <div style="position:absolute;left:60px;bottom:40px;font-size:26px;color:#5a4636;letter-spacing:4px">${publisher}</div>
-    </div>`,
-    720,
-    960,
-  );
-}
+// ---------- 本・電子書籍の表紙（見本の架空の本。store/samples に用意した画像） ----------
 const bookCovers = {
-  nordic: await bookCover("mittens.png", "はじめての<br>北欧ニット", "編み込み模様のこもの", "手芸出版社", "#efe7dc"),
-  everyday: await bookCover("cardigan.png", "毎日着たい<br>手編みのニット", "ケーブル・ラグラン・ベスト", "あみもの書房", "#f3ece4"),
-  lace: await bookCover("shawl.png", "透かし模様の<br>ショールと小物", "電子書籍版", "レース舎", "#f6eedc"),
+  winter: await photo("book-winter.png"),
+  knitdays: await photo("book-knitdays.png"),
 };
 
 // ---------- 編み図（北欧柄のミトンの編み込みチャート） ----------
@@ -180,9 +165,16 @@ async function seed(page) {
       const now = Date.now();
 
       // 本・電子書籍
-      const nordic = await mk({ title: "はじめての北欧ニット", itemType: "book", author: "山田 花子", publisher: "手芸出版社", categoryIds: cat("小物") }, [], jpg(bookCovers.nordic));
-      await mk({ title: "毎日着たい手編みのニット", itemType: "book", author: "佐藤 あみ", publisher: "あみもの書房", categoryIds: cat("セーター") }, [], jpg(bookCovers.everyday));
-      await mk({ title: "透かし模様のショールと小物", itemType: "ebook", author: "鈴木 糸", publisher: "レース舎", ebookUrl: "https://example.com/ebook" }, [], jpg(bookCovers.lace));
+      const winter = await mk(
+        { title: "Winter Knitting 糸と過ごす特別な季節", itemType: "book", publisher: "ニット舎", categoryIds: cat("小物"), tags: ["冬", "編み込み"] },
+        [],
+        jpg(bookCovers.winter),
+      );
+      await mk(
+        { title: "KNIT DAYS 編みもののある、やさしい暮らし", itemType: "ebook", publisher: "ニット舎", ebookUrl: "https://example.com/ebook", categoryIds: cat("セーター") },
+        [],
+        jpg(bookCovers.knitdays),
+      );
 
       // 作品
       await mk({ title: "ラグランセーター", status: "done", categoryIds: cat("セーター"), tags: ["ラグラン"] }, [pdf("raglan.pdf", "original", pdfEn)], jpg(covers.sweater));
@@ -202,7 +194,7 @@ async function seed(page) {
           categoryIds: cat("小物"),
           tags: ["編み込み", "冬"],
           designer: "Nordic Knits",
-          sourceBookId: nordic,
+          sourceBookId: winter,
           sourcePage: "24",
           purchaseUrl: "https://www.ravelry.com/patterns/library/nordic-star-mittens",
           shopName: "Ravelry",
@@ -267,7 +259,7 @@ async function capture(device) {
   // ライブラリ（写真がずらりと並ぶ）
   await page.goto(base + "#/library");
   await page.getByRole("tab", { name: "すべて" }).click();
-  await page.locator(".grid .card").nth(8).waitFor();
+  await page.locator(".grid .card").nth(7).waitFor();
   await settle();
   shots.library = await page.screenshot();
 
@@ -302,6 +294,7 @@ async function capture(device) {
 
   // 本・電子書籍の棚
   await page.evaluate(() => {
+    document.querySelector(".main").style.paddingBottom = "100vh"; // 見出しを画面の上端まで上げられるようにする
     const h = [...document.querySelectorAll("h2")].find((e) => e.textContent?.startsWith("持っている本"));
     window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 24);
   });

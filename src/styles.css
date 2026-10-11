@@ -476,7 +476,7 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 
 /* iPad など広い画面では、表紙を大きく並べる */
 @media (min-width: 900px) {
-  .grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 26px 20px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 26px 22px; }
   .card-title { font-size: 1.02rem; }
 }
 
