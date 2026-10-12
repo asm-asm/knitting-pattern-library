@@ -14,6 +14,33 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
+    /// スリープ中に iOS が WebView の表示プロセスを終了させると、復帰時に黒い画面のまま
+    /// 戻らないことがある。復帰時に応答を確かめ、応答がなければ読み込み直す
+    /// （閲覧位置は保存済みなので、同じページに戻る）。
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        guard let controller = window?.rootViewController as? CAPBridgeViewController,
+              let webView = controller.webView else { return }
+        let reload = {
+            if webView.url != nil {
+                webView.reload()
+            } else if let bridge = controller.bridge {
+                webView.load(URLRequest(url: bridge.config.serverURL))
+            }
+        }
+        if webView.url == nil {
+            reload()
+            return
+        }
+        var answered = false
+        webView.evaluateJavaScript("document.readyState") { result, error in
+            answered = true
+            if error != nil || result == nil { reload() }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            if !answered { reload() }
+        }
+    }
+
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }

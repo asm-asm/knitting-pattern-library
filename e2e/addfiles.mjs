@@ -62,6 +62,21 @@ await step("2件目のPDFをビューアで開け、ファイルを切り替え�
   if (n !== 2) throw new Error(`ファイル切替の選択肢が${n}件`);
 });
 
+await step("スリープ中はPDFの画像メモリを解放し、復帰すると描き直す", async () => {
+  const width = () => page.evaluate(() => document.querySelector('.page-box[data-page="1"] canvas')?.width ?? 0);
+  await page.waitForFunction(() => (document.querySelector('.page-box[data-page="1"] canvas')?.width ?? 0) > 0);
+  const setVisibility = (state) =>
+    page.evaluate((state) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, state);
+  await setVisibility("hidden");
+  await page.waitForFunction(() => document.querySelector('.page-box[data-page="1"] canvas')?.width === 0);
+  await setVisibility("visible");
+  await page.waitForFunction(() => (document.querySelector('.page-box[data-page="1"] canvas')?.width ?? 0) > 0);
+  if (!(await width())) throw new Error("復帰後に描き直されていない");
+});
+
 for (const s of steps) console.log(s.join("  "));
 if (errors.length) console.log("page errors:\n" + errors.join("\n"));
 await browser.close();

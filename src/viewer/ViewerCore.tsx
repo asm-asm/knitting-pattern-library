@@ -247,6 +247,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   }, [save]);
 
   useKeepAwake();
+  const shown = usePageShown();
 
   const current = pageIndexAt(layout, scroll.top + size.h * FOCUS_RATIO);
   const [first, last] = renderRange(layout, scroll.top, size.h || 800);
@@ -408,7 +409,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
             return (
               <div key={i} className="page-box" style={{ top: box.top, left: box.left, width: box.width, height: box.height }} data-page={i + 1}>
                 {source.kind === "pdf" ? (
-                  <PdfPageCanvas doc={source.doc} index={i} width={box.width} active={active} />
+                  <PdfPageCanvas doc={source.doc} index={i} width={box.width} active={active && shown} />
                 ) : (
                   <img className="page-image" src={source.url} alt="" draggable={false} />
                 )}
@@ -703,6 +704,24 @@ function NoteEditorDialog({
       </form>
     </div>
   );
+}
+
+/**
+ * アプリが前面にあるか。スリープ・バックグラウンド中は PDF の画像メモリを解放し、
+ * iOS にアプリの表示処理を終了されて黒い画面になるのを防ぐ（復帰時に描き直す）。
+ */
+function usePageShown() {
+  const [shown, setShown] = useState(() => document.visibilityState !== "hidden");
+  useEffect(() => {
+    const update = () => setShown(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", update);
+    window.addEventListener("pageshow", update);
+    return () => {
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("pageshow", update);
+    };
+  }, []);
+  return shown;
 }
 
 /** 閲覧中は画面を消灯しない（設定で無効化できる。非対応の環境では何もしない） */
