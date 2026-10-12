@@ -14,6 +14,7 @@ import {
   setStatus,
   updateFile,
   UserFacingError,
+  ACCEPTED_FILE_TYPES,
 } from "../db/repo";
 import {
   FILE_KIND_LABELS,
@@ -27,10 +28,10 @@ import {
 } from "../db/types";
 import { formatIsbn } from "../lib/isbn";
 import { Cover, EmptyState, FavoriteButton, StatusBadge } from "../components/PatternParts";
-import { ExternalLinkButton, FileKindSelect, FileSelection, StatusPicker, type PendingFile } from "../components/Inputs";
+import { ExternalLinkButton, FileKindSelect, StatusPicker, type PendingFile } from "../components/Inputs";
 import { useFeedback } from "../components/Feedback";
 import { CounterList, NotesEditor } from "../components/Counters";
-import { formatBytes, formatDate, formatPrice } from "../lib/format";
+import { formatBytes, formatDate, formatPrice, guessFileKind } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
 import { inspectPdf } from "../lib/pdf";
 import { canFetchUrlInfo, fetchImage, fetchPageInfo } from "../lib/fetchUrl";
@@ -370,23 +371,42 @@ function CoverEditor({ pattern, files }: { pattern: Pattern; files: PatternFile[
   );
 }
 
+/**
+ * 追加するファイルの種類を推測する。ファイル名で分からないときは、
+ * すでに英語原本があれば日本語翻訳版とみなす（原本に日本語訳を足すことが多いため）。
+ */
+export function kindForNewFile(name: string, mimeType: string, existing: Pick<PatternFile, "kind">[]): FileKind {
+  if (mimeType.startsWith("image/")) return "chart";
+  const guessed = guessFileKind(name);
+  if (guessed === "original" && existing.some((f) => f.kind === "original")) return "translation";
+  return guessed;
+}
+
 function FilesSection({ pattern, files }: { pattern: Pattern; files: PatternFile[] }) {
   const { toast, showError } = useFeedback();
-  const [adding, setAdding] = useState<PendingFile[]>([]);
   const [busy, setBusy] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
   const groups = FILE_KIND_ORDER.map((k) => [k, files.filter((f) => f.kind === k)] as const).filter(([, l]) => l.length);
 
-  const add = async () => {
+  // ファイルを選んだらすぐに保存する（「追加する」ボタンの押し忘れで消えないように）
+  const add = async (picked: File[]) => {
+    if (!picked.length) return;
     setBusy(true);
     try {
-      const prepared = await prepareFiles(adding, { thumbnail: !pattern.coverBlobId });
+      const known = [...files];
+      const pending: PendingFile[] = picked.map((file, i) => {
+        const kind = kindForNewFile(file.name, file.type, known);
+        known.push({ kind } as PatternFile);
+        return { key: `add${Date.now()}-${i}`, file, kind };
+      });
+      const prepared = await prepareFiles(pending, { thumbnail: !pattern.coverBlobId });
       await addFilesToPattern(pattern.id, prepared.inputs);
       if (prepared.thumbnail && !pattern.coverBlobId) await setPatternCover(pattern.id, prepared.thumbnail);
       prepared.warnings.forEach((w) => toast(w, "error"));
-      toast(`${prepared.inputs.length}件のファイルを追加しました`);
-      setAdding([]);
+      const kinds = [...new Set(pending.map((p) => FILE_KIND_LABELS[p.kind]))].join("・");
+      toast(`「${kinds}」として追加しました。種類は各ファイルの「⋯」から変えられます`);
     } catch (e) {
-      showError(e, "ファイルを追加できませんでした。もう一度お試しください。");
+      showError(e, "ファイルを追加できませんでした。端末の空き容量を確認して、もう一度お試しください。");
     } finally {
       setBusy(false);
     }
@@ -407,12 +427,22 @@ function FilesSection({ pattern, files }: { pattern: Pattern; files: PatternFile
         </div>
       ))}
       <div className="add-files">
-        <FileSelection value={adding} onChange={setAdding} />
-        {adding.length > 0 && (
-          <button type="button" className="btn btn-primary btn-block" onClick={add} disabled={busy}>
-            {busy ? "追加中…" : `${adding.length}件のファイルを追加する`}
-          </button>
-        )}
+        <button type="button" className="btn btn-dashed" disabled={busy} onClick={() => input.current?.click()}>
+          {busy ? "追加中…" : "＋ PDF・画像を追加（日本語訳・修正版など）"}
+        </button>
+        <input
+          ref={input}
+          type="file"
+          accept={ACCEPTED_FILE_TYPES}
+          multiple
+          hidden
+          aria-label="追加するファイル"
+          onChange={(e) => {
+            const picked = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void add(picked);
+          }}
+        />
       </div>
     </section>
   );

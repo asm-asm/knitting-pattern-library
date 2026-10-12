@@ -89,6 +89,7 @@ await step("URLのみで登録（タイトル候補）", async () => {
   await page.locator(".detail-title", { hasText: "mohair beret" }).waitFor();
 });
 
+
 await step("ライブラリ：グリッド/リスト切替・検索・絞り込み", async () => {
   await page.goto(base + "#/library");
   await page.locator(".grid .card").nth(1).waitFor();
