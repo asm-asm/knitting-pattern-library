@@ -358,8 +358,9 @@ async function compose(device, shots) {
     const shotW = phone ? (s.hero ? 1000 : 1040) : s.hero ? 1440 : 1500;
     const frame = phone ? 16 : 14;
     const radius = phone ? 70 : 44;
+    // 価格・「無料」はスクショに書かない（App Store ガイドライン 2.3.7。価格の案内は説明文に書く）
     const badges = s.hero
-      ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:${phone ? 18 : 22}px;margin:${phone ? 34 : 28}px auto 0;max-width:${phone ? 1100 : 1800}px">${["広告なし", "アカウント不要", "オフラインOK", "5作品まで無料"]
+      ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:${phone ? 18 : 22}px;margin:${phone ? 34 : 28}px auto 0;max-width:${phone ? 1100 : 1800}px">${["広告なし", "アカウント不要", "オフラインOK", "日本語訳もまとめて"]
           .map(
             (b) =>
               `<span style="background:#fffaf4;border:3px solid #c7856c;color:#8e4a33;border-radius:999px;padding:${phone ? "10px 24px" : "10px 26px"};font-size:${phone ? 38 : 40}px;font-weight:800;white-space:nowrap">${b}</span>`,
