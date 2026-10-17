@@ -10,6 +10,9 @@ interface ConfirmOptions {
   danger?: boolean;
 }
 
+/** choose の結果。dismiss は「キャンセル」・背景のタップ・Esc で閉じたとき */
+export type Choice = "confirm" | "alternative" | "dismiss";
+
 interface Toast {
   id: number;
   message: string;
@@ -18,6 +21,8 @@ interface Toast {
 
 interface FeedbackApi {
   confirm: (o: ConfirmOptions) => Promise<boolean>;
+  /** 2つの選択肢（confirmLabel / cancelLabel）と「キャンセル」を出す */
+  choose: (o: ConfirmOptions) => Promise<Choice>;
   toast: (message: string, tone?: Toast["tone"]) => void;
   /** 例外を日本語メッセージで通知する */
   showError: (e: unknown, fallback?: string) => void;
@@ -42,14 +47,15 @@ export function errorMessage(e: unknown, fallback = "処理に失敗しました
 }
 
 export function FeedbackProvider({ children }: { children: ReactNode }) {
-  const [dialog, setDialog] = useState<(ConfirmOptions & { resolve: (v: boolean) => void }) | null>(null);
+  const [dialog, setDialog] = useState<(ConfirmOptions & { three: boolean; resolve: (v: Choice) => void }) | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seq = useRef(0);
 
   const confirm = useCallback(
-    (o: ConfirmOptions) => new Promise<boolean>((resolve) => setDialog({ ...o, resolve })),
+    (o: ConfirmOptions) => new Promise<boolean>((resolve) => setDialog({ ...o, three: false, resolve: (v) => resolve(v === "confirm") })),
     [],
   );
+  const choose = useCallback((o: ConfirmOptions) => new Promise<Choice>((resolve) => setDialog({ ...o, three: true, resolve })), []);
   const toast = useCallback((message: string, tone: Toast["tone"] = "info") => {
     const id = ++seq.current;
     setToasts((t) => [...t, { id, message, tone }]);
@@ -57,13 +63,13 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   }, []);
   const showError = useCallback((e: unknown, fallback?: string) => toast(errorMessage(e, fallback), "error"), [toast]);
 
-  const close = (v: boolean) => {
+  const close = (v: Choice) => {
     dialog?.resolve(v);
     setDialog(null);
   };
 
   return (
-    <Ctx.Provider value={{ confirm, toast, showError }}>
+    <Ctx.Provider value={{ confirm, choose, toast, showError }}>
       {children}
       {dialog && <ConfirmDialog options={dialog} onClose={close} />}
       <div className="toasts" role="status" aria-live="polite">
@@ -77,24 +83,35 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose: (v: boolean) => void }) {
+function ConfirmDialog({ options, onClose }: { options: ConfirmOptions & { three: boolean }; onClose: (v: Choice) => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     cancelRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose("dismiss");
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="modal-backdrop" onClick={() => onClose(false)}>
+    <div className="modal-backdrop" onClick={() => onClose("dismiss")}>
       <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
         <h2 id="confirm-title">{options.title}</h2>
         {options.message && <div className="modal-body">{options.message}</div>}
-        <div className="modal-actions">
-          <button ref={cancelRef} className="btn" onClick={() => onClose(false)}>
-            {options.cancelLabel ?? "キャンセル"}
-          </button>
-          <button className={`btn ${options.danger ? "btn-danger" : "btn-primary"}`} onClick={() => onClose(true)}>
+        <div className={`modal-actions ${options.three ? "three" : ""}`}>
+          {options.three ? (
+            <>
+              <button ref={cancelRef} className="btn btn-ghost" onClick={() => onClose("dismiss")}>
+                キャンセル
+              </button>
+              <button className="btn" onClick={() => onClose("alternative")}>
+                {options.cancelLabel}
+              </button>
+            </>
+          ) : (
+            <button ref={cancelRef} className="btn" onClick={() => onClose("dismiss")}>
+              {options.cancelLabel ?? "キャンセル"}
+            </button>
+          )}
+          <button className={`btn ${options.danger ? "btn-danger" : "btn-primary"}`} onClick={() => onClose("confirm")}>
             {options.confirmLabel ?? "OK"}
           </button>
         </div>

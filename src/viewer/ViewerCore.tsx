@@ -31,6 +31,9 @@ import { PdfPageCanvas } from "./PageView";
 import { AnnotationLayer, type InkStyle, type Tool } from "./AnnotationLayer";
 import { INK_COLORS, MARKER_STYLE, PEN_STYLE } from "./ink";
 import { RulerOverlay } from "./RulerOverlay";
+import { PdfLinkLayer } from "./LinkLayer";
+import { resolveDestination, type LinkTarget } from "./links";
+import { PrintButton } from "../components/PrintButton";
 import { newRuler, resizeRuler, stepRuler } from "./ruler";
 import type { RulerState } from "../db/types";
 import { KEEP_AWAKE_KEY } from "../lib/settings";
@@ -68,6 +71,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   const gesturing = useRef(false);
   const pending = useRef<{ anchor: Anchor; vx: number; vy: number } | null>(null);
   const restored = useRef(false);
+  const currentRef = useRef(0);
 
   const files = useLiveQuery(() => db.files.where("patternId").equals(file.patternId).sortBy("createdAt"), [file.patternId]);
   const counters = useLiveQuery(() => db.counters.where("patternId").equals(file.patternId).sortBy("order"), [file.patternId]);
@@ -250,6 +254,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
   const shown = usePageShown();
 
   const current = pageIndexAt(layout, scroll.top + size.h * FOCUS_RATIO);
+  currentRef.current = current;
   const [first, last] = renderRange(layout, scroll.top, size.h || 800);
   const pageCount = source.sizes.length;
 
@@ -301,12 +306,51 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
     }
   }, [counters, moveRuler]);
 
-  const goToPage = (i: number) => {
+  /** y を指定すると、ページ内のその高さ（ページの高さに対する割合）を画面上端付近に表示する */
+  const goToPage = (i: number, y?: number) => {
     const el = scrollRef.current;
     if (!el) return;
     const idx = Math.max(0, Math.min(pageCount - 1, i));
-    el.scrollTo({ top: layout.pages[idx].top - TOP_PAD / 2, left: el.scrollLeft });
+    const box = layout.pages[idx];
+    const top = y === undefined ? box.top - TOP_PAD / 2 : box.top + y * box.height - 12;
+    el.scrollTo({ top, left: el.scrollLeft });
   };
+  const goToPageRef = useRef(goToPage);
+  goToPageRef.current = goToPage;
+
+  // ---- PDF 内のリンク ----
+  const onLink = useCallback(
+    async (target: LinkTarget) => {
+      try {
+        if (target.kind === "url") {
+          let host = target.url;
+          try {
+            host = new URL(target.url).host || target.url;
+          } catch {
+            /* 表示用 */
+          }
+          const ok = await confirm({
+            title: "外部サイトを開きます",
+            message: (
+              <>
+                <p className="break">{host}</p>
+                <p>PDF内のリンクをブラウザで開きます。</p>
+              </>
+            ),
+            confirmLabel: "開く",
+          });
+          if (ok) window.open(target.url, "_blank", "noopener,noreferrer");
+          return;
+        }
+        if (source.kind !== "pdf") return;
+        const dest = await resolveDestination(source.doc, target, currentRef.current);
+        if (dest) goToPageRef.current(dest.page, dest.y);
+      } catch (e) {
+        showError(e, "リンク先を開けませんでした。");
+      }
+    },
+    [confirm, showError, source],
+  );
 
   // ---- 注釈 ----
   const pushUndo = (e: UndoEntry) => {
@@ -414,6 +458,7 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
                   <img className="page-image" src={source.url} alt="" draggable={false} />
                 )}
                 {!active && <span className="page-placeholder">{i + 1}</span>}
+                {active && source.kind === "pdf" && !editMode && <PdfLinkLayer doc={source.doc} index={i} onLink={onLink} />}
                 {active && (
                   <AnnotationLayer
                     page={i + 1}
@@ -562,6 +607,9 @@ export function ViewerCore({ file, source, initialViewState }: { file: PatternFi
           ›
         </button>
         <span className="toolbar-spacer" />
+        <PrintButton file={file} className="icon-btn print-btn">
+          <PrinterIcon />
+        </PrintButton>
         <button type="button" className="icon-btn" aria-label="縮小" onClick={() => zoomTo(zoom / 1.25)}>
           −
         </button>
@@ -754,4 +802,14 @@ function useKeepAwake() {
       void sentinel?.release().catch(() => undefined);
     };
   }, []);
+}
+
+function PrinterIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 9V3h10v6" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M7 14h10v7H7z" fill="var(--surface)" />
+    </svg>
+  );
 }

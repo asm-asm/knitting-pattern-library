@@ -30,6 +30,7 @@ import { formatIsbn } from "../lib/isbn";
 import { Cover, EmptyState, FavoriteButton, StatusBadge } from "../components/PatternParts";
 import { ExternalLinkButton, FileKindSelect, StatusPicker, type PendingFile } from "../components/Inputs";
 import { useFeedback } from "../components/Feedback";
+import { PrintButton } from "../components/PrintButton";
 import { CounterList, NotesEditor } from "../components/Counters";
 import { formatBytes, formatDate, formatPrice, guessFileKind } from "../lib/format";
 import { prepareFiles, readImage } from "../lib/importFiles";
@@ -525,6 +526,9 @@ function FileRow({ file }: { file: PatternFile }) {
         </span>
       </Link>
       <ShareFileButton file={file} />
+      <PrintButton file={file} className="share-btn">
+        印刷
+      </PrintButton>
       <button type="button" className="icon-btn" aria-label={`${file.name} の名前・種別を変更`} onClick={() => setEditing(true)}>
         ⋯
       </button>
