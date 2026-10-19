@@ -198,8 +198,7 @@ async function seed(page) {
           sourcePage: "24",
           purchaseUrl: "https://www.ravelry.com/patterns/library/nordic-star-mittens",
           shopName: "Ravelry",
-          price: 6,
-          currency: "USD",
+          // 購入価格は入れない（作品の価格でも、ストア画像に金額が写ると審査で価格の記載とみなされるおそれがあるため）
           yarn: "中細ウール　紺・生成り",
           needles: "4号・5号 4本棒針",
           gauge: "30目×32段 / 10cm",
@@ -242,8 +241,9 @@ async function seed(page) {
 async function capture(device) {
   const phone = device === "iphone";
   const ctx = await browser.newContext({
-    viewport: phone ? { width: 440, height: 956 } : { width: 1032, height: 1376 },
-    deviceScaleFactor: phone ? 3 : 2,
+    // iPad は 11インチ（834×1112pt）の画面で撮る。13インチの大きさだと文字や表紙が小さく、ストアで見づらいため
+    viewport: phone ? { width: 440, height: 956 } : { width: 834, height: 1112 },
+    deviceScaleFactor: phone ? 3 : 2.5,
     locale: "ja-JP",
     colorScheme: "light",
     hasTouch: true,

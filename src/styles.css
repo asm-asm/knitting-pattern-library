@@ -476,10 +476,13 @@ button.row { width: 100%; border: none; text-align: left; font: inherit; color: 
 .ruler-step.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
 .ruler-link { min-height: 40px; border: 1px solid var(--input-border); border-radius: 999px; background: var(--input-bg); padding: 4px 10px; font-size: 16px; flex: none; }
 
-/* iPad など広い画面では、表紙を大きく並べる */
-@media (min-width: 900px) {
+/* iPad など広い画面（11インチ以上）では、表紙や本棚を大きく並べる */
+@media (min-width: 768px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 26px 22px; }
   .card-title { font-size: 1.02rem; }
+  .shelf { grid-auto-columns: minmax(190px, 220px); gap: 18px; }
+  .wip-card { grid-template-columns: 140px 1fr; }
+  .wip-title { font-size: 1.15rem; }
 }
 
 /* これ持ってる？ */
