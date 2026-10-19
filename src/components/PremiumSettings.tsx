@@ -2,9 +2,8 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
 import { useFeedback } from "./Feedback";
-import { usePremium } from "./Paywall";
-import { countByKind, FREE_BOOK_LIMIT, FREE_PATTERN_LIMIT, manageSubscriptions, restorePurchases } from "../lib/premium";
-import { formatDate } from "../lib/format";
+import { LegacySubscriptionNotice, usePremium } from "./Paywall";
+import { countByKind, FREE_BOOK_LIMIT, FREE_PATTERN_LIMIT, restorePurchases } from "../lib/premium";
 import { BACK_STATE } from "../hooks/navigation";
 
 /** 設定画面のプレミアム欄（iOS アプリのみ） */
@@ -19,7 +18,7 @@ export function PremiumSettings() {
       <dl className="info-list">
         <div>
           <dt>ご利用中のプラン</dt>
-          <dd>{premium.active ? "プレミアム（登録数 無制限）" : `無料版（作品${FREE_PATTERN_LIMIT}件・本${FREE_BOOK_LIMIT}冊まで）`}</dd>
+          <dd>{premium.active ? "プレミアム（買い切り・登録数 無制限）" : `無料版（作品${FREE_PATTERN_LIMIT}件・本${FREE_BOOK_LIMIT}冊まで）`}</dd>
         </div>
         <div>
           <dt>登録作品</dt>
@@ -29,13 +28,8 @@ export function PremiumSettings() {
           <dt>本・電子書籍</dt>
           <dd>{premium.active ? `${counts?.books ?? "…"}冊` : `${counts?.books ?? "…"} / ${FREE_BOOK_LIMIT}冊`}</dd>
         </div>
-        {premium.active && premium.expiresAt && (
-          <div>
-            <dt>次回の自動更新</dt>
-            <dd>{formatDate(premium.expiresAt)}</dd>
-          </div>
-        )}
       </dl>
+      {premium.legacySubscription && <LegacySubscriptionNotice />}
       <div className="backup-actions">
         {!premium.active && (
           <Link to="/premium" state={BACK_STATE} className="btn btn-primary">
@@ -55,9 +49,6 @@ export function PremiumSettings() {
           }}
         >
           購入を復元する
-        </button>
-        <button type="button" className="btn" onClick={() => manageSubscriptions().catch((e) => showError(e, "サブスクリプションの管理画面を開けませんでした。"))}>
-          サブスクリプションを管理（解約など）
         </button>
       </div>
     </section>

@@ -316,8 +316,8 @@ async function capture(device) {
   await page.evaluate(async () => {
     const m = await import("/src/lib/premium.ts");
     m.__previewPremium(
-      { enforced: true, active: false, checking: false },
-      { id: m.PREMIUM_PRODUCT_ID, displayName: "プレミアム（月額）", description: "", displayPrice: "¥150", price: 150, period: { unit: "month", value: 1 } },
+      { enforced: true, active: false, legacySubscription: false, checking: false },
+      { id: m.PREMIUM_PRODUCT_ID, displayName: "プレミアム（買い切り）", description: "", displayPrice: "¥500", price: 500 },
     );
   });
   await page.goto(base + "#/new");

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canAddPattern, FREE_PATTERN_LIMIT, isPremiumActive, PREMIUM_PRODUCT_ID } from "./premium";
+import {
+  canAddPattern,
+  FREE_PATTERN_LIMIT,
+  hasActiveLegacySubscription,
+  isPremiumActive,
+  LEGACY_SUBSCRIPTION_ID,
+  PREMIUM_PRODUCT_ID,
+  type Entitlement,
+} from "./premium";
 
 describe("無料版の登録数の上限", () => {
   it("5件までは無料で登録でき、6件目からはプレミアムが必要", () => {
@@ -21,14 +29,29 @@ describe("無料版の登録数の上限", () => {
   });
 });
 
-describe("プレミアムの有効判定", () => {
+describe("プレミアムの有効判定（買い切り）", () => {
   const now = 1_000_000;
-  it("有効期限内のサブスクリプションがあれば有効", () => {
-    expect(isPremiumActive([{ productId: PREMIUM_PRODUCT_ID, purchaseDate: 0, expirationDate: now + 1 }], now)).toBe(true);
+  const status = (entitlements: Entitlement[], purchasedProductIds: string[] = []) => ({ entitlements, purchasedProductIds });
+
+  it("買い切りを購入していれば有効（期限はない）", () => {
+    expect(isPremiumActive(status([{ productId: PREMIUM_PRODUCT_ID, purchaseDate: 0 }]))).toBe(true);
+    expect(isPremiumActive(status([], [PREMIUM_PRODUCT_ID]))).toBe(true);
   });
-  it("期限切れ・別の商品・購入なしは無効", () => {
-    expect(isPremiumActive([{ productId: PREMIUM_PRODUCT_ID, purchaseDate: 0, expirationDate: now - 1 }], now)).toBe(false);
-    expect(isPremiumActive([{ productId: "other", purchaseDate: 0, expirationDate: now + 1 }], now)).toBe(false);
-    expect(isPremiumActive([], now)).toBe(false);
+
+  it("以前の月額プランを一度でも購入していれば、期限が切れても有効", () => {
+    expect(isPremiumActive(status([{ productId: LEGACY_SUBSCRIPTION_ID, purchaseDate: 0, expirationDate: now + 1 }]))).toBe(true);
+    expect(isPremiumActive(status([], [LEGACY_SUBSCRIPTION_ID]))).toBe(true);
+  });
+
+  it("別の商品・購入なしは無効", () => {
+    expect(isPremiumActive(status([{ productId: "other", purchaseDate: 0 }], ["other"]))).toBe(false);
+    expect(isPremiumActive(status([]))).toBe(false);
+    expect(isPremiumActive({ entitlements: [] })).toBe(false);
+  });
+
+  it("月額プランが有効なままなら解約を案内する（期限切れ・解約済みなら案内しない）", () => {
+    expect(hasActiveLegacySubscription(status([{ productId: LEGACY_SUBSCRIPTION_ID, purchaseDate: 0, expirationDate: now + 1 }]), now)).toBe(true);
+    expect(hasActiveLegacySubscription(status([], [LEGACY_SUBSCRIPTION_ID]), now)).toBe(false);
+    expect(hasActiveLegacySubscription(status([{ productId: PREMIUM_PRODUCT_ID, purchaseDate: 0 }]), now)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import Foundation
 import Capacitor
 import StoreKit
 
-/// App Store のサブスクリプションを扱うプラグイン（StoreKit 2）。
+/// App Store のアプリ内課金（買い切り・以前の月額プラン）を扱うプラグイン（StoreKit 2）。
 /// 購入の確認は端末内で行い、購入情報を外部のサーバーへ送らない。
 @objc(StorePlugin)
 public class StorePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -35,8 +35,17 @@ public class StorePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func notifyEntitlementsChanged() async {
-        let entitlements = await StorePlugin.currentEntitlements()
-        notifyListeners("entitlementsChanged", data: ["entitlements": entitlements])
+        notifyListeners("entitlementsChanged", data: await StorePlugin.status())
+    }
+
+    /// 現在有効な購入と、これまでに購入したことのある商品（返金されたものを除く）
+    static func status() async -> [String: Any] {
+        var purchased = Set<String>()
+        for await result in Transaction.all {
+            guard case .verified(let t) = result, t.revocationDate == nil else { continue }
+            purchased.insert(t.productID)
+        }
+        return ["entitlements": await currentEntitlements(), "purchasedProductIds": Array(purchased)]
     }
 
     /// 現在有効な購入（Apple が署名を確認できたものだけ）
@@ -108,7 +117,9 @@ public class StorePlugin: CAPPlugin, CAPBridgedPlugin {
                     switch verification {
                     case .verified(let transaction):
                         await transaction.finish()
-                        call.resolve(["status": "purchased", "entitlements": await StorePlugin.currentEntitlements()])
+                        var data = await StorePlugin.status()
+                        data["status"] = "purchased"
+                        call.resolve(data)
                     case .unverified:
                         call.reject("purchase could not be verified", "UNVERIFIED")
                     }
@@ -128,7 +139,7 @@ public class StorePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getEntitlements(_ call: CAPPluginCall) {
         Task {
-            call.resolve(["entitlements": await StorePlugin.currentEntitlements()])
+            call.resolve(await StorePlugin.status())
         }
     }
 
@@ -136,7 +147,7 @@ public class StorePlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             do {
                 try await AppStore.sync()
-                call.resolve(["entitlements": await StorePlugin.currentEntitlements()])
+                call.resolve(await StorePlugin.status())
             } catch {
                 call.reject(error.localizedDescription, "FAILED")
             }

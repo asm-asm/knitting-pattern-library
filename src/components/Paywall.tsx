@@ -9,19 +9,16 @@ import {
   TERMS_URL,
   getPremiumState,
   loadPremiumProduct,
+  manageSubscriptions,
   purchasePremium,
   restorePurchases,
   subscribePremium,
   type StoreProduct,
 } from "../lib/premium";
-import { formatDate } from "../lib/format";
 
 export function usePremium() {
   return useSyncExternalStore(subscribePremium, getPremiumState);
 }
-
-const PERIOD_ONE: Record<string, string> = { day: "日", week: "週", month: "月", year: "年" };
-const PERIOD_MANY: Record<string, string> = { day: "日", week: "週間", month: "か月", year: "年" };
 
 /**
  * プレミアムの案内と購入画面。
@@ -72,21 +69,15 @@ export function Paywall({
     };
   }, [reload]);
 
-  const period = product?.period
-    ? product.period.value === 1
-      ? PERIOD_ONE[product.period.unit]
-      : `${product.period.value}${PERIOD_MANY[product.period.unit]}`
-    : "月";
-  const priceLabel = product ? `${product.displayPrice} / ${period}` : "月額 150円";
+  const price = product?.displayPrice ?? "500円";
 
   if (premium.active) {
     return (
       <div className="paywall">
         <div className="paywall-badge">プレミアム</div>
         <h2 className="paywall-title">プレミアムをご利用中です</h2>
-        <p>作品・本の登録数に上限はありません。</p>
-        {premium.expiresAt && <p className="muted small">次回の自動更新日：{formatDate(premium.expiresAt)}</p>}
-        <p className="muted small">解約や支払い方法の変更は、設定画面の「サブスクリプションを管理」から行えます。</p>
+        <p>作品・本の登録数に上限はありません。追加の料金はかかりません。</p>
+        {premium.legacySubscription && <LegacySubscriptionNotice />}
         {onClose && (
           <button type="button" className="btn btn-primary btn-block" onClick={onClose}>
             作品の登録に進む
@@ -102,7 +93,7 @@ export function Paywall({
       <h2 className="paywall-title">{reason === "limit" ? `無料で登録できる${noun}は${limit}${unit}までです` : "作品も本も、いくつでも登録できます"}</h2>
       {reason === "limit" && (
         <p>
-          いま登録されている{noun}は{patternCount ?? limit}{unit}です。{limit + 1}{unit}目以降を登録するには、プレミアム（{priceLabel}）にお申し込みください。
+          いま登録されている{noun}は{patternCount ?? limit}{unit}です。{limit + 1}{unit}目以降を登録するには、プレミアム（買い切り {price}）をご購入ください。
         </p>
       )}
 
@@ -111,6 +102,8 @@ export function Paywall({
           作品（編み図）と本・電子書籍の登録数が<strong>無制限</strong>になります（無料版は作品{FREE_PATTERN_LIMIT}件・本{FREE_BOOK_LIMIT}冊まで）
         </li>
         <li>登録済みの作品の閲覧・編集・PDF・段数カウンターは、これまでどおり無料で使えます</li>
+        <li>一度購入すれば、ずっと使えます（月額料金や自動更新はありません）</li>
+        <li>同じ Apple ID のほかの iPhone・iPad でも「購入を復元する」で使えます</li>
         <li>削除すれば、無料版でもまた新しく登録できます</li>
       </ul>
 
@@ -135,7 +128,7 @@ export function Paywall({
           setBusy("buy");
           try {
             const status = await purchasePremium();
-            if (status === "purchased") toast("プレミアムに登録しました。ありがとうございます！");
+            if (status === "purchased") toast("プレミアムを購入しました。ありがとうございます！");
             else if (status === "pending") toast("購入の承認待ちです。承認されると自動で有効になります。");
           } catch (e) {
             showError(e, "購入を完了できませんでした。時間をおいてもう一度お試しください。");
@@ -144,7 +137,7 @@ export function Paywall({
           }
         }}
       >
-        {busy === "buy" ? "処理中…" : product ? `${priceLabel} で登録する` : product === null ? "現在は購入できません" : "読み込み中…"}
+        {busy === "buy" ? "処理中…" : product ? `${price}で購入する（買い切り）` : product === null ? "現在は購入できません" : "読み込み中…"}
       </button>
 
       <button
@@ -173,12 +166,33 @@ export function Paywall({
       )}
 
       <p className="paywall-legal">
-        お支払いは購入の確定時に Apple ID に請求されます。サブスクリプションは、現在の期間が終了する24時間前までに解約しない限り、同じ料金で自動的に更新されます。解約は、iPhone の「設定」→ ご自身の名前 →「サブスクリプション」から行えます。
+        お支払いは購入の確定時に Apple ID に1回だけ請求されます。買い切りのため、自動更新や追加の請求はありません。以前の月額プランをご購入いただいた方は、そのままプレミアムをお使いいただけます。
       </p>
       <div className="paywall-links">
         <ExternalLinkButton url={TERMS_URL} label="利用規約（EULA）" pageName="利用規約" className="btn btn-ghost btn-small" />
         <ExternalLinkButton url={PRIVACY_URL} label="プライバシーポリシー" pageName="プライバシーポリシー" className="btn btn-ghost btn-small" />
       </div>
+    </div>
+  );
+}
+
+/** 以前の月額プランが有効なままの人への案内（買い切りに切り替わったため、解約しても使い続けられる） */
+export function LegacySubscriptionNotice() {
+  const { showError } = useFeedback();
+  return (
+    <div className="note-box">
+      <p>
+        <strong>月額プランをご利用いただいていた方へ</strong>
+        <br />
+        プレミアムは買い切りになりました。月額プランをご購入いただいた方は、解約してもこのままずっとプレミアムをお使いいただけます。今後の請求を止めるには、月額プランを解約してください（解約済みの場合は対応不要です）。
+      </p>
+      <button
+        type="button"
+        className="btn btn-small"
+        onClick={() => manageSubscriptions().catch((e) => showError(e, "サブスクリプションの管理画面を開けませんでした。iPhone の「設定」→ ご自身の名前 →「サブスクリプション」から解約できます。"))}
+      >
+        月額プランを解約する
+      </button>
     </div>
   );
 }
