@@ -145,6 +145,23 @@ const rowY = (r) => (chartTop + chart.rows * CELL - (r - 0.5) * CELL) / PAGE_H;
 const rowH = CELL / PAGE_H;
 const pdfEn = await renderPdf(patternHtml("en"));
 
+// 架空の本の ISBN（チェックディジットだけ正しい）
+const SAMPLE_ISBN = "9784910999012";
+
+// まとめて登録する画面で選ぶファイル（ファイル名から種類が自動で振り分けられる）
+const BULK_DIR = join(OUT, "_tmp", "bulk");
+mkdirSync(BULK_DIR, { recursive: true });
+const bulkFiles = [
+  ["Nordic Star Mittens.pdf", pdfEn],
+  ["北欧柄のミトン_日本語訳.pdf", pdfJa],
+  ["Nordic Star Mittens_chart.pdf", pdfJa],
+  ["Nordic Star Mittens_errata.pdf", pdfEn],
+].map(([name, buf]) => {
+  const p = join(BULK_DIR, name);
+  writeFileSync(p, buf);
+  return p;
+});
+
 // ---------- アプリにサンプルデータを入れて撮影 ----------
 const server = await createServer({ server: { port: 4190, strictPort: true }, logLevel: "error" });
 await server.listen();
@@ -152,7 +169,7 @@ const base = "http://localhost:4190/";
 
 async function seed(page) {
   await page.evaluate(
-    async ({ pdfJa, pdfEn, covers, bookCovers, chartRows, ruler, mark }) => {
+    async ({ pdfJa, pdfEn, covers, bookCovers, chartRows, ruler, mark, sampleIsbn }) => {
       const repo = await import("/src/db/repo.ts");
       const { db } = await import("/src/db/db.ts");
       const bin = (s) => Uint8Array.from(atob(s), (ch) => ch.charCodeAt(0)).buffer;
@@ -166,7 +183,7 @@ async function seed(page) {
 
       // 本・電子書籍
       const winter = await mk(
-        { title: "Winter Knitting 糸と過ごす特別な季節", itemType: "book", publisher: "ニット舎", categoryIds: cat("小物"), tags: ["冬", "編み込み"] },
+        { title: "Winter Knitting 糸と過ごす特別な季節", itemType: "book", publisher: "ニット舎", isbn: sampleIsbn, categoryIds: cat("小物"), tags: ["冬", "編み込み"] },
         [],
         jpg(bookCovers.winter),
       );
@@ -234,6 +251,7 @@ async function seed(page) {
       chartRows: chart.rows,
       ruler: { y: rowY(24), h: rowH },
       mark: { y: rowY(11), w: (CELL / 794) * 0.95 },
+      sampleIsbn: SAMPLE_ISBN,
     },
   );
 }
@@ -263,7 +281,38 @@ async function capture(device) {
   await settle();
   shots.library = await page.screenshot();
 
+  // PDFをまとめて登録（原本・日本語訳・チャート・修正版を一度に選ぶ）
+  await page.goto(base + "#/new");
+  await page.locator("input[type=file][multiple]").setInputFiles(bulkFiles);
+  await page.locator(".pending-files li").nth(3).waitFor();
+  await page.getByLabel("作品タイトル（必須）").fill("北欧柄のミトン");
+  await page.evaluate(() => {
+    // ブラウザ版だけに出る注意書き（iPhone アプリには出ない）は写さない
+    for (const el of document.querySelectorAll(".hint")) if (el.textContent.includes("ブラウザ版")) el.remove();
+    window.scrollTo(0, 0);
+  });
+  await settle();
+  shots.bulk = await page.screenshot();
+
+  // これ持ってる？（本のバーコードから、持っている本かをすぐ確認）
+  await page.route("https://api.openbd.jp/**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([{ summary: { title: "Winter Knitting 糸と過ごす特別な季節", author: "", publisher: "ニット舎", volume: "", cover: "" } }]),
+    }),
+  );
+  await page.evaluate(async () => (await import("/src/lib/barcode.ts")).__previewBarcode(true));
+  await page.goto(base + "#/check");
+  await page.getByLabel("調べたい本や作品").fill("978-4-910999-01-2");
+  await page.getByRole("button", { name: "調べる", exact: true }).click();
+  await page.locator(".verdict.owned").waitFor();
+  await page.locator(".check-items .row-thumb").first().waitFor();
+  await settle();
+  shots.check = await page.screenshot();
+
   // 作品詳細
+  await page.goto(base + "#/library");
+  await page.locator(".grid .card").nth(7).waitFor();
   await page.getByText("北欧柄のミトン").first().click();
   await page.locator(".detail-title").waitFor();
   await settle();
@@ -331,13 +380,13 @@ async function capture(device) {
 // ---------- 見出しを付けて仕上げる ----------
 // 最初の数枚が検索結果に出るので、一番の魅力を先頭に置く
 const slides = [
-  { key: "library", title: "編み図も、本も、\nぜんぶここに。", hero: true },
-  { key: "ruler", title: "今編んでいる段が、\nひと目でわかる", sub: "定規と段数カウンターが連動" },
+  { key: "library", title: "散らかりがちな編み図PDF、\nぜんぶここで整理。", hero: true },
+  { key: "bulk", title: "PDFは何枚でも\nまとめて登録", sub: "原本・日本語訳・チャートをファイル名で自動仕分け" },
+  { key: "check", title: "「これ持ってる？」\n本屋さんですぐ確認", sub: "バーコードをかざすだけ。二重買いを防げる" },
   { key: "detail", title: "英語の原本と日本語訳を\nひとつの作品に", sub: "購入先や糸・針の情報もまとめて" },
+  { key: "ruler", title: "今編んでいる段が、\nひと目でわかる", sub: "定規と段数カウンターが連動" },
+  { key: "books", title: "持っている本も\n電子書籍も本棚に", sub: "バーコードを読むだけで登録" },
   { key: "annotate", title: "マーカーとメモで\n編み図に書き込み", sub: "元のPDFはそのまま" },
-  { key: "home", title: "制作中の作品に\nすぐ戻れる", sub: "前回見ていたページから再開" },
-  { key: "books", title: "持っている本も\n電子書籍も管理", sub: "バーコードを読むだけで登録" },
-  { key: "privacy", title: "データは\n端末の中だけ", sub: "アカウント登録なし・広告なし" },
 ];
 
 const KNIT_BG = `url("data:image/svg+xml,${encodeURIComponent(
@@ -360,31 +409,41 @@ async function compose(device, shots) {
     const radius = phone ? 70 : 44;
     // 価格・「無料」はスクショに書かない（App Store ガイドライン 2.3.7。価格の案内は説明文に書く）
     const badges = s.hero
-      ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:${phone ? 18 : 22}px;margin:${phone ? 34 : 28}px auto 0;max-width:${phone ? 1100 : 1800}px">${["広告なし", "アカウント不要", "オフラインOK", "日本語訳もまとめて"]
+      ? `<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:${phone ? 18 : 22}px;margin:${phone ? 34 : 28}px auto 0;max-width:${phone ? 1100 : 1800}px">${["広告なし", "アカウント不要", "オフラインOK", "データは端末の中だけ"]
           .map(
             (b) =>
               `<span style="background:#fffaf4;border:3px solid #c7856c;color:#8e4a33;border-radius:999px;padding:${phone ? "10px 24px" : "10px 26px"};font-size:${phone ? 38 : 40}px;font-weight:800;white-space:nowrap">${b}</span>`,
           )
           .join("")}</div>`
       : "";
-    // 先頭の1枚は、写真を背景に散らして華やかにする
+    // 先頭の1枚は、ダウンロードフォルダなどに散らかりがちなファイル名を周りに浮かべる
+    const chip = ([name, x, y, r, img]) =>
+      `<div style="position:absolute;left:${x}px;top:${y}px;transform:rotate(${r}deg);display:flex;align-items:center;gap:${phone ? 18 : 16}px;
+        background:#fffdfa;border-radius:${phone ? 26 : 22}px;padding:${phone ? "20px 30px 20px 20px" : "16px 26px 16px 16px"};box-shadow:0 18px 40px rgba(80,50,30,.20);white-space:nowrap">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:${phone ? 78 : 66}px;height:${phone ? 92 : 78}px;border-radius:12px;
+          background:${img ? "#6f8fb4" : "#c0503a"};color:#fff;font-weight:800;font-size:${phone ? 26 : 22}px;letter-spacing:1px">${img ? "IMG" : "PDF"}</span>
+        <span style="color:#4e2f22;font-weight:700;font-size:${phone ? 40 : 34}px">${name}</span></div>`;
     const floating = s.hero
-      ? [
-          ["cardigan.png", phone ? -170 : -40, phone ? 1250 : 900, -9],
-          ["shawl.png", phone ? W - 250 : W - 420, phone ? 1120 : 820, 8],
-          ["socks.png", phone ? -150 : 30, phone ? 2250 : 1950, 7],
-          ["beret.png", phone ? W - 270 : W - 400, phone ? 2200 : 1900, -6],
-        ]
-          .map(
-            ([f, x, y, r]) =>
-              `<img src="${dataUrl(f)}" style="position:absolute;left:${x}px;top:${y}px;width:${phone ? 420 : 460}px;height:${phone ? 560 : 610}px;object-fit:cover;border-radius:28px;border:12px solid #fff;box-shadow:0 20px 50px rgba(80,50,30,.22);transform:rotate(${r}deg)">`,
-          )
+      ? (phone
+          ? [
+              ["pattern_final(2).pdf", 30, 1010, -8],
+              ["ミトン 日本語訳.pdf", 760, 1150, 7],
+              ["IMG_2048.PNG", 40, 2330, 6, true],
+              ["cardigan_ENG_v3.pdf", 700, 2480, -6],
+            ]
+          : [
+              ["pattern_final(2).pdf", 40, 770, -7],
+              ["ミトン 日本語訳.pdf", 1560, 860, 6],
+              ["IMG_2048.PNG", 20, 2330, 6, true],
+              ["cardigan_ENG_v3.pdf", 1520, 2420, -6],
+            ]
+        )
+          .map(chip)
           .join("")
       : "";
     await page.setContent(
       `<html><body style="margin:0;width:${W}px;height:${H}px;overflow:hidden;position:relative;font-family:'Yu Gothic','Meiryo',sans-serif;
         background:${KNIT_BG},linear-gradient(180deg,#f6e9df 0%,#efdcd0 100%);background-size:44px 44px,auto">
-        ${floating}
         <div style="position:relative;text-align:center;padding-top:${phone ? 130 : 100}px">
           <div style="color:#4e2f22;font-weight:800;font-size:${titleSize}px;line-height:1.28;letter-spacing:2px">${lines.join("<br>")}</div>
           ${s.sub ? `<div style="margin-top:${phone ? 28 : 22}px;color:#8e5a44;font-weight:700;font-size:${phone ? 48 : 50}px">${s.sub}</div>` : ""}
@@ -392,6 +451,7 @@ async function compose(device, shots) {
         </div>
         <img src="${img}" style="position:relative;display:block;margin:${phone ? 90 : 70}px auto 0;width:${shotW}px;border-radius:${radius}px;
           border:${frame}px solid #241c18;box-shadow:0 40px 90px rgba(78,47,34,.32)">
+        ${floating}
       </body></html>`,
       { waitUntil: "load" },
     );

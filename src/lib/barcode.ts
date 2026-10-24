@@ -10,7 +10,7 @@ interface BarcodeScannerPlugin {
 const BarcodeScanner = registerPlugin<BarcodeScannerPlugin>("BarcodeScanner");
 
 export function canScanBarcode(): boolean {
-  return isNativeApp();
+  return isNativeApp() || (import.meta.env.DEV && previewScan);
 }
 
 /** 読み取った番号を返す。キャンセルしたときは undefined。 */
@@ -24,4 +24,10 @@ export async function scanIsbnBarcode(): Promise<string | undefined> {
     }
     throw new UserFacingError("カメラを起動できませんでした。ISBN を手入力してください。");
   }
+}
+
+// ---- ストア用スクリーンショットの作成専用（開発サーバーでのみ動く。本番のアプリには影響しない） ----
+let previewScan = false;
+export function __previewBarcode(on: boolean) {
+  if (import.meta.env.DEV) previewScan = on;
 }
