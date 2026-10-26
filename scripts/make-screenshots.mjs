@@ -1,12 +1,14 @@
 // App Store 用スクリーンショットを作る。
 // サンプルの作品データ（store/samples の写真）を実際のアプリに入れて撮影し、見出しを付けて仕上げる。
 //   node scripts/make-screenshots.mjs
+//   node scripts/make-screenshots.mjs --footage   … App プレビュー動画用に、アプリを操作する様子を録画する（store/preview/footage）
 // 出力：store/screenshots/iphone/*.png（1320×2868）、store/screenshots/ipad/*.png（2064×2752）
 // 写真・本の表紙・編み図はすべて見本として用意したもので、実在の作品・書籍ではない。
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const OUT = "store/screenshots";
 const SAMPLES = "store/samples";
@@ -256,6 +258,199 @@ async function seed(page) {
   );
 }
 
+
+// ---------- App プレビュー動画用の録画（--footage） ----------
+// 実際のアプリを操作する様子を、ブラウザの画面転送（CDP の screencast）でそのままの画質で受け取り、
+// ffmpeg で 30fps の動画にする。タップした位置と時刻は taps.json に書き出し、動画側でタップの印を重ねる。
+const FOOTAGE = join("store", "preview", "footage");
+
+async function recordClip(page, dir, name, run) {
+  const cdp = await page.context().newCDPSession(page);
+  const frames = [];
+  const taps = [];
+  let t0;
+  cdp.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
+    t0 ??= metadata.timestamp;
+    frames.push({ data, t: metadata.timestamp - t0 });
+    cdp.send("Page.screencastFrameAck", { sessionId }).catch(() => undefined);
+  });
+  const vp = page.viewportSize();
+  const dpr = await page.evaluate(() => devicePixelRatio);
+  await cdp.send("Page.startScreencast", { format: "png", maxWidth: Math.round(vp.width * dpr), maxHeight: Math.round(vp.height * dpr), everyNthFrame: 1 });
+  // 最初のフレームが届くまで待つ（静止画面でも1枚は届くよう、少しだけ再描画させる）
+  await page.evaluate(() => document.body.style.setProperty("--rec", String(Math.random())));
+  await page.waitForTimeout(300);
+  const start = Date.now();
+  const now = () => (Date.now() - start) / 1000 + 0.3;
+  const tap = async (locator) => {
+    const box = await locator.boundingBox();
+    taps.push({ t: Number(now().toFixed(2)), x: (box.x + box.width / 2) / vp.width, y: (box.y + box.height / 2) / vp.height });
+    await page.waitForTimeout(250); // タップの印が先に見えてから画面が変わるように
+    await locator.click();
+  };
+  await run({ tap, wait: (ms) => page.waitForTimeout(ms) });
+  const total = now();
+  await cdp.send("Page.stopScreencast");
+  await cdp.detach();
+
+  const tmp = join(dir, `_${name}`);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  let list = "ffconcat version 1.0\n";
+  frames.forEach((fr, i) => {
+    const file = `f${String(i).padStart(5, "0")}.png`;
+    writeFileSync(join(tmp, file), Buffer.from(fr.data, "base64"));
+    const next = i + 1 < frames.length ? frames[i + 1].t : Math.max(total, fr.t + 0.04);
+    list += `file ${file}\nduration ${Math.max(0.001, next - fr.t).toFixed(4)}\n`;
+  });
+  // 最後のフレームをもう一度並べる（ffconcat は最後の duration を使わないため）
+  list += `file f${String(frames.length - 1).padStart(5, "0")}.png\n`;
+  writeFileSync(join(tmp, "list.txt"), list);
+  const out = join(dir, `${name}.mp4`);
+  const r = spawnSync(
+    "ffmpeg",
+    ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", join(tmp, "list.txt"), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "14", "-preset", "slow", "-movflags", "+faststart", out],
+    { stdio: "inherit" },
+  );
+  if (r.status !== 0) throw new Error("ffmpeg failed: " + name);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  console.log(`  ${name}: ${frames.length} frames, ${total.toFixed(1)}s`);
+  return { name, duration: Number(total.toFixed(2)), taps };
+}
+
+async function recordFootage(device) {
+  const phone = device === "iphone";
+  const dir = join(FOOTAGE, device);
+  fs.mkdirSync(dir, { recursive: true });
+  const ctx = await browser.newContext({
+    // 画面転送は等倍でしか届かないため、動画の大きさ（iPhone 886×1920、iPad 1200×1600）の画面に
+    // アプリを CSS の zoom で拡大して表示する（iPhone は2倍、iPad は1.44倍）。PDF もその倍率で描かせる
+    viewport: phone ? { width: 886, height: 1920 } : { width: 1200, height: 1600 },
+    deviceScaleFactor: 1,
+    locale: "ja-JP",
+    colorScheme: "light",
+    hasTouch: true,
+  });
+  const zoom = phone ? 2 : 1.44;
+  await ctx.addInitScript((z) => {
+    Object.defineProperty(window, "devicePixelRatio", { get: () => z });
+    const apply = () => {
+      document.documentElement.style.zoom = String(z);
+      const st = document.createElement("style");
+      st.textContent = "::-webkit-scrollbar{display:none}";
+      document.head.appendChild(st);
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+    else apply();
+  }, zoom);
+  const page = await ctx.newPage();
+  await page.goto(base);
+  await page.getByText("編み図ライブラリへようこそ").waitFor();
+  await seed(page);
+  const clips = [];
+  const smoothScroll = (y, ms) =>
+    page.evaluate(
+      ([y, ms]) =>
+        new Promise((done) => {
+          const from = window.scrollY;
+          const t0 = performance.now();
+          const step = (t) => {
+            const k = Math.min(1, (t - t0) / ms);
+            const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+            window.scrollTo(0, from + (y - from) * e);
+            if (k < 1) requestAnimationFrame(step);
+            else done();
+          };
+          requestAnimationFrame(step);
+        }),
+      [y, ms],
+    );
+
+  // 1. ライブラリ：写真が並ぶ一覧をゆっくりスクロール
+  await page.goto(base + "#/library");
+  await page.locator(".grid .card").nth(7).waitFor();
+  await page.waitForTimeout(1200);
+  clips.push(
+    await recordClip(page, dir, "library", async ({ wait }) => {
+      await wait(900);
+      await smoothScroll(phone ? 520 : 380, 2600);
+      await wait(900);
+    }),
+  );
+
+  // 2. まとめて登録：4つのPDFを一度に選ぶと、種類が自動で振り分けられる
+  await page.goto(base + "#/new");
+  await page.getByLabel("作品タイトル（必須）").fill("北欧柄のミトン");
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll(".hint")) if (el.textContent.includes("ブラウザ版")) el.remove();
+  });
+  await page.waitForTimeout(800);
+  clips.push(
+    await recordClip(page, dir, "bulk", async ({ tap, wait }) => {
+      await wait(700);
+      // 「＋ PDF・画像を選ぶ」を押すと、端末のファイル選択が開く（録画では選んだ結果だけを映す）
+      const chooser = page.waitForEvent("filechooser");
+      await tap(page.getByRole("button", { name: "＋ PDF・画像を選ぶ" }));
+      await (await chooser).setFiles(bulkFiles);
+      await page.locator(".pending-files li").nth(3).waitFor();
+      await wait(900);
+      await smoothScroll(phone ? 330 : 120, 1100);
+      await wait(1800);
+    }),
+  );
+
+  // 3. これ持ってる？：バーコードで調べると「持っています」
+  await page.route("https://api.openbd.jp/**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify([{ summary: { title: "Winter Knitting 糸と過ごす特別な季節", author: "", publisher: "ニット舎", volume: "", cover: "" } }]),
+    }),
+  );
+  await page.evaluate(async () => (await import("/src/lib/barcode.ts")).__previewBarcode(true));
+  await page.goto(base + "#/check");
+  await page.getByRole("button", { name: "バーコードで調べる" }).waitFor();
+  await page.waitForTimeout(800);
+  clips.push(
+    await recordClip(page, dir, "check", async ({ tap, wait }) => {
+      await wait(700);
+      // 実機ではカメラが開いてバーコードを読み取る。録画では読み取った番号で調べた結果を映す
+      const box = await page.getByRole("button", { name: "バーコードで調べる" }).boundingBox();
+      const vp = page.viewportSize();
+      clipsTapHint.push({ t: 1.0, x: (box.x + box.width / 2) / vp.width, y: (box.y + box.height / 2) / vp.height });
+      await wait(1100);
+      await page.getByLabel("調べたい本や作品").fill("978-4-910999-01-2");
+      await page.getByRole("button", { name: "調べる", exact: true }).click();
+      await page.locator(".verdict.owned").waitFor();
+      await wait(3000);
+    }),
+  );
+  clips[clips.length - 1].taps.push(...clipsTapHint.splice(0));
+
+  // 4. 定規と段数カウンター：＋を押すと、定規が次の段へ動く
+  await page.goto(base + "#/library");
+  await page.locator(".grid .card").nth(7).waitFor();
+  await page.getByText("北欧柄のミトン").first().click();
+  await page.getByRole("link", { name: /日本語訳\.pdf/ }).click();
+  await page.waitForFunction(() => (document.querySelector('.page-box[data-page="2"] canvas')?.width ?? 0) > 0);
+  await page.locator(".ruler-band").waitFor();
+  await page.getByRole("button", { name: "段数" }).click();
+  await page.waitForTimeout(1500);
+  clips.push(
+    await recordClip(page, dir, "ruler", async ({ tap, wait }) => {
+      await wait(800);
+      const plus = page.getByRole("button", { name: "甲側の模様 を1段進める" });
+      await tap(plus);
+      await wait(900);
+      await tap(plus);
+      await wait(1500);
+    }),
+  );
+
+  writeFileSync(join(dir, "clips.json"), JSON.stringify({ device, viewport: page.viewportSize(), clips }, null, 2));
+  await ctx.close();
+}
+const clipsTapHint = [];
+
 async function capture(device) {
   const phone = device === "iphone";
   const ctx = await browser.newContext({
@@ -459,6 +654,16 @@ async function compose(device, shots) {
     writeFileSync(join(dir, `${String(i + 1).padStart(2, "0")}-${s.key}.png`), await page.screenshot({ type: "png" }));
   }
   await page.close();
+}
+
+if (process.argv.includes("--footage")) {
+  for (const device of ["iphone", "ipad"]) {
+    console.log(device);
+    await recordFootage(device);
+  }
+  await browser.close();
+  await server.close();
+  process.exit(0);
 }
 
 for (const device of ["iphone", "ipad"]) {

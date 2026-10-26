@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1200, height=1600" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1200px; height: 1600px; overflow: hidden; background: #f3e4d9; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="24.5" data-width="1200" data-height="1600">
+      <div id="s1" data-composition-id="s1" data-composition-src="compositions/s1.html" data-start="0" data-duration="5"
+        data-track-index="1" data-track-kind="graphics" data-width="1200" data-height="1600"></div>
+      <div id="s2" data-composition-id="s2" data-composition-src="compositions/s2.html" data-start="5" data-duration="5.4"
+        data-track-index="2" data-track-kind="graphics" data-width="1200" data-height="1600"></div>
+      <div id="s3" data-composition-id="s3" data-composition-src="compositions/s3.html" data-start="10.4" data-duration="5.4"
+        data-track-index="3" data-track-kind="graphics" data-width="1200" data-height="1600"></div>
+      <div id="s4" data-composition-id="s4" data-composition-src="compositions/s4.html" data-start="15.8" data-duration="4.4"
+        data-track-index="4" data-track-kind="graphics" data-width="1200" data-height="1600"></div>
+      <div id="s5" data-composition-id="s5" data-composition-src="compositions/s5.html" data-start="20.2" data-duration="4.3"
+        data-track-index="5" data-track-kind="graphics" data-width="1200" data-height="1600"></div>
+    </div>
+    <script>
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

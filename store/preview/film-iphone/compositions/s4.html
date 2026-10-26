@@ -1,0 +1,51 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; font-family: "Noto Sans JP", sans-serif;
+      background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%3E%3Cpath%20d%3D%22M6%206%20L22%2030%20L38%206%22%20fill%3D%22none%22%20stroke%3D%22rgba(168%2C98%2C74%2C0.07)%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"), linear-gradient(180deg, #f6e9df 0%, #efdcd0 100%); background-size: 44px 44px, auto; }
+    #s4-cap { position: absolute; left: 71px; right: 71px; top: 112px; text-align: center; color: #4e2f22; z-index: 5; }
+    #s4-cap .l { display: block; white-space: nowrap; font-weight: 900; font-size: 58px; line-height: 1.28; letter-spacing: 0.02em; }
+    #s4-cap .l em { font-style: normal; color: #a8624a; }
+    #s4-cap .sub { display: block; margin-top: 16px; font-weight: 700; font-size: 32px; color: #8e5a44; letter-spacing: 0.02em; }
+    #s4-cam { position: absolute; left: 63px; top: 372px; width: 760px; height: 1647px; z-index: 2; }
+    #s4-scr { position: absolute; inset: 0; border-radius: 54px; overflow: hidden; border: 10px solid #241c18; background: #f6f1ec;
+      box-shadow: 0 34px 80px rgba(78, 47, 34, 0.3); }
+    #s4-zoom { position: absolute; inset: 0; }
+    #s4-zoom video, #s4-zoom img.shot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+    .tap { position: absolute; width: 78px; height: 78px; margin: -39px 0 0 -39px; border-radius: 50%; border: 7px solid #a8624a; opacity: 0; }
+    .dot { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgba(168, 98, 74, 0.55); opacity: 0; }
+  </style>
+  <div data-hf-id="hf-b7sn" id="root" data-composition-id="s4" data-width="886" data-height="1920">
+    <div data-hf-id="hf-er9r" id="s4-cap">
+      <span data-hf-id="hf-deoz" class="l" id="s4-l1">今編んでいる段が、</span>
+      <span data-hf-id="hf-esc3" class="l" id="s4-l2"><em data-hf-id="hf-kuu5">ひと目でわかる</em></span>
+      <span data-hf-id="hf-32ne" class="sub" id="s4-sub">定規と段数カウンターが連動</span>
+    </div>
+    <div data-hf-id="hf-51hj" id="s4-cam" data-layout-allow-overflow>
+      <div data-hf-id="hf-dixj" id="s4-scr">
+        <div data-hf-id="hf-ra9s" id="s4-zoom">
+          <video data-hf-id="hf-zx3p" id="s4-video" class="clip" data-start="0" data-duration="4.4" data-track-index="1" src="assets/ruler.mp4" muted playsinline></video>
+        <div data-hf-id="hf-dl3y" class="tap" id="s4-tap0" style="left:86.00%;top:66.83%"></div>
+        <div data-hf-id="hf-2wm2" class="dot" id="s4-dot0" style="left:86.00%;top:66.83%"></div>
+        <div data-hf-id="hf-moop" class="tap" id="s4-tap1" style="left:86.00%;top:66.83%"></div>
+        <div data-hf-id="hf-m8dh" class="dot" id="s4-dot1" style="left:86.00%;top:66.83%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#s4-cam", { x: 886 }, { x: 0, duration: 0.53, ease: "power2.inOut" }, 0);
+      tl.fromTo(["#s4-l1", "#s4-l2", "#s4-sub"], { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.47, ease: "power3.out", stagger: 0.13 }, 0.1);
+      tl.fromTo("#s4-zoom", { scale: 1.12 }, { scale: 1.12, transformOrigin: "35% 42%", duration: 0.01 }, 0);
+      tl.fromTo("#s4-tap0", { scale: 0.4, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.47, ease: "power2.out" }, 1.11);
+      tl.fromTo("#s4-dot0", { opacity: 0 }, { opacity: 1, duration: 0.05 }, 1.11);
+      tl.to("#s4-dot0", { opacity: 0, duration: 0.15 }, 1.31);
+      tl.fromTo("#s4-tap1", { scale: 0.4, opacity: 0.9 }, { scale: 1.6, opacity: 0, duration: 0.47, ease: "power2.out" }, 2.30);
+      tl.fromTo("#s4-dot1", { opacity: 0 }, { opacity: 1, duration: 0.05 }, 2.30);
+      tl.to("#s4-dot1", { opacity: 0, duration: 0.15 }, 2.50);
+      tl.fromTo(["#s4-l1", "#s4-l2", "#s4-sub"], { opacity: 1 }, { opacity: 0, duration: 0.33, ease: "power2.in", immediateRender: false }, 4.05);
+      window.__timelines["s4"] = tl;
+    })();
+  </script>
+</template>

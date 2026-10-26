@@ -1,0 +1,64 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; font-family: "Noto Sans JP", sans-serif;
+      background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%3E%3Cpath%20d%3D%22M6%206%20L22%2030%20L38%206%22%20fill%3D%22none%22%20stroke%3D%22rgba(168%2C98%2C74%2C0.07)%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"), linear-gradient(180deg, #f6e9df 0%, #efdcd0 100%); background-size: 44px 44px, auto; }
+    #s1-cap { position: absolute; left: 71px; right: 71px; top: 112px; text-align: center; color: #4e2f22; z-index: 5; }
+    #s1-cap .l { display: block; white-space: nowrap; font-weight: 900; font-size: 58px; line-height: 1.28; letter-spacing: 0.02em; }
+    #s1-cap .l em { font-style: normal; color: #a8624a; }
+    #s1-cap .sub { display: block; margin-top: 16px; font-weight: 700; font-size: 32px; color: #8e5a44; letter-spacing: 0.02em; }
+    #s1-cam { position: absolute; left: 63px; top: 372px; width: 760px; height: 1647px; z-index: 2; }
+    #s1-scr { position: absolute; inset: 0; border-radius: 54px; overflow: hidden; border: 10px solid #241c18; background: #f6f1ec;
+      box-shadow: 0 34px 80px rgba(78, 47, 34, 0.3); }
+    #s1-zoom { position: absolute; inset: 0; }
+    #s1-zoom video, #s1-zoom img.shot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+    .tap { position: absolute; width: 78px; height: 78px; margin: -39px 0 0 -39px; border-radius: 50%; border: 7px solid #a8624a; opacity: 0; }
+    .dot { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgba(168, 98, 74, 0.55); opacity: 0; }
+  </style>
+  <div data-hf-id="hf-9ply" id="root" data-composition-id="s1" data-width="886" data-height="1920">
+    <div data-hf-id="hf-y8uq" id="s1-cap">
+      <span data-hf-id="hf-3dh0" class="l" id="s1-l1">散らかる<em data-hf-id="hf-k66f">編み図PDF</em>、</span>
+      <span data-hf-id="hf-hyt4" class="l" id="s1-l2">ぜんぶここで整理。</span>
+      
+    </div>
+    <style>
+    .chip { position: absolute; display: flex; align-items: center; gap: 16px; background: #fffdfa; border-radius: 22px; padding: 16px 26px 16px 16px;
+      box-shadow: 0 18px 40px rgba(80, 50, 30, 0.22); white-space: nowrap; z-index: 4; }
+    .chip i { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 72px; border-radius: 10px; color: #fff;
+      font-style: normal; font-weight: 900; font-size: 24px; letter-spacing: 0; background: #c0503a; }
+    .chip i.img { background: #6f8fb4; }
+    .chip b { color: #4e2f22; font-weight: 700; font-size: 30px; }</style>
+    <div data-hf-id="hf-ephm" id="s1-cam" data-layout-allow-overflow>
+      <div data-hf-id="hf-l5dy" id="s1-scr">
+        <div data-hf-id="hf-qi07" id="s1-zoom">
+          <video data-hf-id="hf-b2hi" id="s1-video" class="clip" data-start="0" data-duration="5" data-track-index="1" src="assets/library.mp4" muted playsinline></video>
+        </div>
+      </div>
+    </div>
+    <div data-hf-id="hf-kruq" class="chip" id="s1-chip0" style="left:30px;top:470px;transform:rotate(-8deg)"><i data-hf-id="hf-o1lm" class="">PDF</i><b data-hf-id="hf-af3r">pattern_final(2).pdf</b></div>
+    <div data-hf-id="hf-wdzz" class="chip" id="s1-chip1" style="left:420px;top:640px;transform:rotate(7deg)"><i data-hf-id="hf-l6im" class="">PDF</i><b data-hf-id="hf-je7z">ミトン 日本語訳.pdf</b></div>
+    <div data-hf-id="hf-ne2o" class="chip" id="s1-chip2" style="left:60px;top:900px;transform:rotate(6deg)"><i data-hf-id="hf-wh4g" class="img">IMG</i><b data-hf-id="hf-ssna">IMG_2048.PNG</b></div>
+    <div data-hf-id="hf-clj0" class="chip" id="s1-chip3" style="left:330px;top:1150px;transform:rotate(-6deg)"><i data-hf-id="hf-lktn" class="">PDF</i><b data-hf-id="hf-7oob">cardigan_ENG_v3.pdf</b></div>
+    <div data-hf-id="hf-95zv" class="chip" id="s1-chip4" style="left:40px;top:1420px;transform:rotate(-4deg)"><i data-hf-id="hf-lz4o" class="">PDF</i><b data-hf-id="hf-agb7">新しいパターン (1).pdf</b></div>
+    <div data-hf-id="hf-osbk" class="chip" id="s1-chip5" style="left:470px;top:1640px;transform:rotate(8deg)"><i data-hf-id="hf-hw20" class="img">IMG</i><b data-hf-id="hf-mztk">chart_scan.png</b></div>
+  </div>
+  <script>
+    (function () {
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#s1-chip0", { x: 0, y: 0, rotation: -8, scale: 1, opacity: 1 },
+        { x: 213, y: 346, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.00);
+      tl.fromTo("#s1-chip1", { x: 0, y: 0, rotation: 7, scale: 1, opacity: 1 },
+        { x: -177, y: 176, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.10);
+      tl.fromTo("#s1-chip2", { x: 0, y: 0, rotation: 6, scale: 1, opacity: 1 },
+        { x: 183, y: -84, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.20);
+      tl.fromTo("#s1-chip3", { x: 0, y: 0, rotation: -6, scale: 1, opacity: 1 },
+        { x: -87, y: -334, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.30);
+      tl.fromTo("#s1-chip4", { x: 0, y: 0, rotation: -4, scale: 1, opacity: 1 },
+        { x: 203, y: -604, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.40);
+      tl.fromTo("#s1-chip5", { x: 0, y: 0, rotation: 8, scale: 1, opacity: 1 },
+        { x: -227, y: -824, rotation: 0, scale: 0.12, opacity: 0, duration: 0.5, ease: "power2.in" }, 1.50);
+      tl.fromTo("#s1-cam", { x: 0 }, { x: -886, duration: 0.4, ease: "power2.in", immediateRender: false }, 4.6);
+      tl.fromTo(["#s1-l1", "#s1-l2"], { opacity: 1 }, { opacity: 0, duration: 0.33, ease: "power2.in", immediateRender: false }, 4.6);
+      window.__timelines["s1"] = tl;
+    })();
+  </script>
+</template>

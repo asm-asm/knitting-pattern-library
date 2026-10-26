@@ -12,3 +12,11 @@ public/pdfjs
 .p8*
 AuthKey_*
 store/screenshots/_tmp
+
+# App プレビュー動画の生成物（録画・レンダリング結果は大きいのでコミットしない。再生成は store/preview/build-film.mjs）
+store/preview/footage/
+store/preview/film-*/assets/
+store/preview/film-*/renders/
+store/preview/film-*/.hyperframes/
+store/preview/film-*/boards/
+store/preview/appstore-preview-*.mp4

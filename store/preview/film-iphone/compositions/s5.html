@@ -1,0 +1,48 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; overflow: hidden; font-family: "Noto Sans JP", sans-serif;
+      background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2244%22%20height%3D%2244%22%3E%3Cpath%20d%3D%22M6%206%20L22%2030%20L38%206%22%20fill%3D%22none%22%20stroke%3D%22rgba(168%2C98%2C74%2C0.07)%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"), linear-gradient(180deg, #f6e9df 0%, #efdcd0 100%); background-size: 44px 44px, auto; }
+    #s5-cap { position: absolute; left: 71px; right: 71px; top: 112px; text-align: center; color: #4e2f22; z-index: 5; }
+    #s5-cap .l { display: block; white-space: nowrap; font-weight: 900; font-size: 58px; line-height: 1.28; letter-spacing: 0.02em; }
+    #s5-cap .l em { font-style: normal; color: #a8624a; }
+    #s5-cap .sub { display: block; margin-top: 16px; font-weight: 700; font-size: 32px; color: #8e5a44; letter-spacing: 0.02em; }
+    #s5-cam { position: absolute; left: 63px; top: 372px; width: 760px; height: 1647px; z-index: 2; }
+    #s5-scr { position: absolute; inset: 0; border-radius: 54px; overflow: hidden; border: 10px solid #241c18; background: #f6f1ec;
+      box-shadow: 0 34px 80px rgba(78, 47, 34, 0.3); }
+    #s5-zoom { position: absolute; inset: 0; }
+    #s5-zoom video, #s5-zoom img.shot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }
+    .tap { position: absolute; width: 78px; height: 78px; margin: -39px 0 0 -39px; border-radius: 50%; border: 7px solid #a8624a; opacity: 0; }
+    .dot { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgba(168, 98, 74, 0.55); opacity: 0; }
+  </style>
+  <div data-hf-id="hf-z5t6" id="root" data-composition-id="s5" data-width="886" data-height="1920">
+    <style>
+      #s5-icon { position: absolute; left: 293px; top: 640px; width: 300px; height: 300px; border-radius: 68px;
+        box-shadow: 0 28px 60px rgba(78, 47, 34, 0.28); z-index: 3; }
+      #s5-name { position: absolute; left: 0; right: 0; top: 1010px; text-align: center; font-weight: 900; font-size: 70px;
+        color: #4e2f22; letter-spacing: 0.04em; }
+      #s5-tag { position: absolute; left: 0; right: 0; top: 1130px; text-align: center; font-weight: 700; font-size: 34px; color: #8e5a44; }
+    </style>
+    <div data-hf-id="hf-4t8u" id="s5-cam" data-layout-allow-overflow>
+      <div data-hf-id="hf-z2qy" id="s5-scr">
+        <div data-hf-id="hf-ol63" id="s5-zoom"><img data-hf-id="hf-orpm" class="shot" id="s5-last" src="assets/ruler-last.png" alt="" /></div>
+      </div>
+    </div>
+    <img data-hf-id="hf-h3by" id="s5-icon" src="assets/icon.png" alt="" />
+    <div data-hf-id="hf-57jf" id="s5-name">編み図ライブラリ</div>
+    <div data-hf-id="hf-rqtc" id="s5-tag">編み図PDF管理と段数カウンターをひとつに</div>
+  </div>
+  <script>
+    (function () {
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#s5-zoom", { scale: 1.12 }, { scale: 1.12, transformOrigin: "35% 42%", duration: 0.01 }, 0);
+      tl.fromTo("#s5-cam", { x: 0, y: 0, scale: 1 },
+        { x: 0, y: -405, scale: 0.395, duration: 0.6, ease: "power2.inOut" }, 0.1);
+      tl.fromTo("#s5-scr", { borderRadius: 54 }, { borderRadius: 171, duration: 0.6, ease: "power2.inOut" }, 0.1);
+      tl.fromTo("#s5-cam", { opacity: 1 }, { opacity: 0, duration: 0.2, immediateRender: false }, 0.62);
+      tl.fromTo("#s5-icon", { scale: 0.92, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.6)" }, 0.55);
+      tl.fromTo("#s5-name", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.47, ease: "power3.out" }, 0.95);
+      tl.fromTo("#s5-tag", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.47, ease: "power3.out" }, 1.08);
+      window.__timelines["s5"] = tl;
+    })();
+  </script>
+</template>
