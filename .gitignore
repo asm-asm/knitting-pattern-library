@@ -20,3 +20,4 @@ store/preview/film-*/renders/
 store/preview/film-*/.hyperframes/
 store/preview/film-*/boards/
 store/preview/appstore-preview-*.mp4
+store/preview/film-*/.thumbnails/
